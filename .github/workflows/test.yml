@@ -1,0 +1,76 @@
+
+name: Game Price Tracker test
+
+on:
+  schedule:
+    - cron: "30 0 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "選擇執行模式"
+        required: true
+        type: choice
+        default: check
+        options:
+          - check
+          - test-notification
+
+permissions:
+  contents: write
+
+# 避免同一個 workflow 同時執行並提交通知紀錄
+concurrency:
+  group: game-price-tracker
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download project
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Prepare notification history
+        run: |
+          if [ ! -f notification_state.json ]; then
+            echo '{}' > notification_state.json
+          fi
+
+      - name: Run selected mode
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ "${{ inputs.mode }}" = "test-notification" ]; then
+            python main.py --test-notification
+          else
+            python main.py
+          fi
+
+      - name: Save notification history
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add notification_state.json
+
+          if ! git diff --cached --quiet; then
+            git commit -m "Update notification history"
+
+            # 取得遠端最新版本，整合 Discord Bot 等操作的更新
+            git fetch origin main
+            git rebase origin/main
+
+            # 同步完成後再推送
+            git push origin HEAD:main
+          else
+            echo "Notification history unchanged"
+          fi
