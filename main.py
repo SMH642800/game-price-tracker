@@ -172,6 +172,19 @@ def main():
     with open("games_track_list.json", "r", encoding="utf-8") as file:
         games = json.load(file)
 
+    # 清除已不在追蹤清單中的 Steam 遊戲通知紀錄
+    active_app_ids = {
+        str(game["app_id"])
+        for game in games
+        if game.get("platform") == "steam" and game.get("app_id")
+    }
+
+    removed_app_ids = set(notification_state) - active_app_ids
+
+    for app_id in removed_app_ids:
+        notification_state.pop(app_id, None)
+        print(f"Removed stale notification state: {app_id}")
+
     for game_config in games:
         if game_config.get("platform") != "steam":
             print(f"Skipping unsupported platform: {game_config.get('platform')}")
