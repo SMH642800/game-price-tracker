@@ -18,6 +18,11 @@ on:
 permissions:
   contents: write
 
+# 避免同一個 workflow 同時執行並提交通知紀錄
+concurrency:
+  group: game-price-tracker
+  cancel-in-progress: false
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -54,10 +59,18 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git add notification_state.json
+
           if ! git diff --cached --quiet; then
             git commit -m "Update notification history"
-            git push
+
+            # 取得遠端最新版本，整合 Discord Bot 等操作的更新
+            git fetch origin main
+            git rebase origin/main
+
+            # 同步完成後再推送
+            git push origin HEAD:main
           else
             echo "Notification history unchanged"
           fi
