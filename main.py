@@ -1,7 +1,7 @@
 import os
 import requests
 
-APP_ID = os.getenv("STEAM_APP_ID", "570")
+APP_ID = os.getenv("STEAM_APP_ID", "413150")
 WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 
 API_URL = (
