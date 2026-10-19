@@ -17,6 +17,7 @@ def main():
     response.raise_for_status()
 
     payload = response.json().get(APP_ID, {})
+    print("=== VERSION CHECK 20261019 ===", flush=True)
     print("DEBUG APP_ID:", APP_ID)
     print("DEBUG API success:", payload.get("success"))
     print("DEBUG game name:", payload.get("data", {}).get("name"))
