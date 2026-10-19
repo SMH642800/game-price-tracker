@@ -1,11 +1,10 @@
-
 name: Game Price Tracker Test
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   check:
@@ -23,7 +22,25 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Prepare notification history
+        run: |
+          if [ ! -f notification_state.json ]; then
+            echo '{}' > notification_state.json
+          fi
+
       - name: Test Steam price and Discord notification
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: python main.py
+
+      - name: Save notification history
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add notification_state.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Update notification history"
+            git push
+          else
+            echo "Notification history unchanged"
+          fi
