@@ -1,7 +1,17 @@
+
 name: Game Price Tracker Test
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "選擇執行模式"
+        required: true
+        type: choice
+        default: check
+        options:
+          - check
+          - test-notification
 
 permissions:
   contents: write
@@ -28,10 +38,15 @@ jobs:
             echo '{}' > notification_state.json
           fi
 
-      - name: Test Steam price and Discord notification
+      - name: Run selected mode
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        run: python main.py
+        run: |
+          if [ "${{ inputs.mode }}" = "test-notification" ]; then
+            python main.py --test-notification
+          else
+            python main.py
+          fi
 
       - name: Save notification history
         run: |

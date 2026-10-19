@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 from datetime import datetime, timezone
 import requests
 
@@ -158,5 +159,30 @@ def main():
     save_notification_state(notification_state)
 
 
+def test_notification():
+    state = load_notification_state()
+    test_key = "__discord_test_notification__"
+
+    if test_key in state:
+        print("Test notification already sent. Skipping.")
+        return
+
+    message = (
+        "🧪 **Discord 通知測試**\n"
+        "這是一則測試訊息，不代表任何 Steam 遊戲正在特價。\n"
+        "如果你看到這則訊息，代表 Discord Webhook 可以正常運作。"
+    )
+
+    send_discord_message(message)
+
+    state[test_key] = {"sent": True}
+    save_notification_state(state)
+
+    print("Test notification sent and saved.")
+
+
 if __name__ == "__main__":
-    main()
+    if "--test-notification" in sys.argv:
+        test_notification()
+    else:
+        main()
