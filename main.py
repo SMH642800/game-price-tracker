@@ -193,9 +193,23 @@ def main():
             continue
 
         app_id = str(game_config["app_id"])
-        game = get_steam_price(app_id)
+
+        try:
+            game = get_steam_price(app_id)
+        except (
+            requests.RequestException,
+            ValueError,
+            KeyError,
+            TypeError,
+        ) as error:
+            print(
+                f"ERROR: Failed to check Steam App ID {app_id}: "
+                f"{type(error).__name__}: {error}"
+            )
+            continue
 
         if game is None:
+            print(f"WARNING: No usable price data for Steam App ID {app_id}")
             continue
 
         # 記錄每款遊戲目前的折扣狀態
