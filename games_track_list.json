@@ -8,5 +8,10 @@
     "platform": "steam",
     "app_id": "1794680",
     "name": "Vampire Survivors"
+  },
+  {
+    "platform": "steam",
+    "app_id": "2288340",
+    "name": "ACE COMBAT 8: WINGS OF THEVE"
   }
 ]
