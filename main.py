@@ -171,6 +171,8 @@ def main():
 
     with open("games_track_list.json", "r", encoding="utf-8") as file:
         games = json.load(file)
+        print("=== Current watch list ===")
+        print(json.dumps(games, ensure_ascii=False, indent=2))
 
     # 清除已不在追蹤清單中的 Steam 遊戲通知紀錄
     active_app_ids = {
