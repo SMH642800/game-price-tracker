@@ -1,5 +1,5 @@
 
-name: Game Price Tracker
+name: Game Price Tracker test
 
 on:
   schedule:
