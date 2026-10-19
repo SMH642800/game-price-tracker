@@ -17,6 +17,10 @@ def main():
     response.raise_for_status()
 
     payload = response.json().get(APP_ID, {})
+    print("DEBUG APP_ID:", APP_ID)
+    print("DEBUG API success:", payload.get("success"))
+    print("DEBUG game name:", payload.get("data", {}).get("name"))
+    print("DEBUG price_overview:", payload.get("data", {}).get("price_overview"))
 
     if not payload.get("success"):
         raise RuntimeError(f"Steam returned no usable data for app {APP_ID}")
