@@ -1,8 +1,11 @@
 import json
+import re
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import requests
+
+TAIWAN_TZ = timezone(timedelta(hours=8))
 
 WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 
@@ -42,7 +45,10 @@ def get_steam_price(app_id):
         "final_price": price["final"] / 100,
         "initial_price": price["initial"] / 100,
         "discount": price.get("discount_percent", 0),
-        "discount_expiration": price.get("discount_expiration"),
+        "discount_expiration": (
+            price.get("discount_expiration")
+            or get_steam_discount_expiration(app_id)
+        ),
         "url": f"https://store.steampowered.com/app/{app_id}/",
     }
 
@@ -70,6 +76,65 @@ def load_notification_state():
 def save_notification_state(state):
     with open("notification_state.json", "w", encoding="utf-8") as file:
         json.dump(state, file, ensure_ascii=False, indent=2)
+
+
+def get_steam_discount_expiration(app_id):
+    url = f"https://store.steampowered.com/app/{app_id}/"
+
+    try:
+        response = requests.get(
+            url,
+            params={"cc": "tw", "l": "zh-tw"},
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=20,
+        )
+        response.raise_for_status()
+
+        match = re.search(
+            r'<p class="game_purchase_discount_countdown">'
+            r'\s*SPECIAL PROMOTION!\s*Offer ends '
+            r'(\d{1,2}) ([A-Za-z]+)',
+            response.text,
+            re.IGNORECASE,
+        )
+
+        if not match:
+            return None
+
+        day = int(match.group(1))
+        month_name = match.group(2)
+
+        month = datetime.strptime(month_name, "%B").month
+        now = datetime.now(timezone.utc)
+
+        year = now.year
+        expiration = datetime(
+            year, month, day, 23, 59, 59, tzinfo=timezone.utc
+        )
+
+        if expiration < now:
+            expiration = datetime(
+                year + 1, month, day, 23, 59, 59,
+                tzinfo=timezone.utc,
+            )
+
+        return int(expiration.timestamp())
+
+    except (requests.RequestException, ValueError) as error:
+        print(f"Could not parse Steam sale expiration for {app_id}: {error}")
+        return None
+
+
+def format_taiwan_datetime(expiration):
+    if not expiration:
+        return "商店未提供結束時間"
+
+    dt = datetime.fromtimestamp(
+        int(expiration),
+        tz=timezone.utc,
+    ).astimezone(TAIWAN_TZ)
+
+    return dt.strftime("%Y/%m/%d %H:%M")
 
 
 def format_time_remaining(expiration):
@@ -138,11 +203,16 @@ def main():
             game.get("discount_expiration")
         )
 
+        expiration_text = format_taiwan_datetime(
+            game.get("discount_expiration")
+        )
+
         message = (
             f"🎮 **Steam 特價通知：{game['name']}**\n"
             f"目前價格：{game['currency']} {game['final_price']:.2f}\n"
             f"原價：{game['currency']} {game['initial_price']:.2f}\n"
             f"折扣：{game['discount']}%\n"
+            f"截止時間：{expiration_text}（台灣時間）\n"
             f"剩餘時間：{remaining_text}\n"
             f"{game['url']}"
         )
