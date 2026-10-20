@@ -21,7 +21,7 @@ def _integer_field(value: Any, field: str, *, default: int | None = None) -> int
     if value is None and default is not None:
         return default
     if isinstance(value, bool):
-        raise ValueError(f"Steam API returned malformed {field}")
+        raise ValueError(f"Steam API returned malformed price fields ({field})")
     if isinstance(value, int):
         return value
     if isinstance(value, str) and value.strip().isdigit():
@@ -79,7 +79,7 @@ def get_price(
 
     currency = price.get("currency")
     if not isinstance(currency, str) or not currency.strip():
-        raise ValueError(f"Steam API returned no currency for {product_id}")
+        return {"name": name, "price_available": False, "url": url}
     currency = currency.strip().upper()
     # A Taiwan request with a different or absent currency is not a verified
     # Taiwan numeric price. Never silently relabel it as TWD.
