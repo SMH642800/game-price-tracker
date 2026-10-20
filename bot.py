@@ -3,6 +3,7 @@ import base64
 import json
 import os
 import time
+from urllib.parse import quote_plus
 
 import discord
 import requests
@@ -176,6 +177,29 @@ def product_id_of(game):
     return str(game.get("product_id", game.get("app_id", ""))).strip()
 
 
+def platform_store_links(platform, query):
+    """Return store and web price-search links, not verified price data."""
+    encoded = quote_plus(str(query).strip())
+    if platform == "ps5":
+        return {
+            "store": f"https://store.playstation.com/zh-hant-tw/search/{encoded}",
+            "price_search": f"https://www.google.com/search?q={quote_plus('PS5 台灣 遊戲 價格 ' + str(query).strip())}",
+        }
+    if platform == "ns2":
+        return {
+            "store": "https://store.nintendo.com.tw/",
+            "price_search": f"https://www.google.com/search?q={quote_plus('Nintendo Switch 2 台灣 遊戲 價格 ' + str(query).strip())}",
+        }
+    raise ValueError("Unsupported link-only platform")
+
+
+def platform_product_key(query):
+    normalized = " ".join(str(query).strip().split()).casefold()
+    if not normalized:
+        raise ValueError("Game search text cannot be empty")
+    return normalized
+
+
 def is_admin(user):
     return ADMIN_ID is not None and str(user.id) == ADMIN_ID
 
@@ -184,7 +208,9 @@ async def platform_autocomplete(interaction, current):
     if not current.strip():
         return []
     platform = str(getattr(interaction.namespace, "platform", "steam")).lower()
-    # Only Steam has a live, verified search adapter for now.
+    if platform in ("ps5", "ns2"):
+        query = " ".join(current.strip().split())
+        return [app_commands.Choice(name=f"搜尋 {SUPPORTED_PLATFORMS[platform]}：{query}"[:100], value=query)]
     if platform != "steam":
         return []
     try:
@@ -299,11 +325,32 @@ async def add_game(interaction: discord.Interaction, platform: str, game: str):
         await interaction.response.send_message("⛔ 你沒有 Bot 管理員權限。", ephemeral=True)
         return
     platform = platform.lower()
+    if platform in ("ps5", "ns2"):
+        try:
+            name = " ".join(game.strip().split())
+            product_id = platform_product_key(name)
+            links = platform_store_links(platform, name)
+            def add_link_only_mutation(games):
+                if any(platform_of(item) == platform and product_id_of(item) == product_id for item in games):
+                    return games, False
+                games.append({
+                    "platform": platform, "store": "link_only", "product_id": product_id,
+                    "region": "TW", "name": name, "price_mode": "links_only",
+                })
+                return games, True
+            added = await asyncio.to_thread(update_github_watchlist, add_link_only_mutation)
+            status = "已新增" if added else "已在追蹤清單中"
+            await interaction.response.send_message(
+                f"✅ **{name}**（{SUPPORTED_PLATFORMS[platform]}／台灣區）{status}。\n"
+                "目前只提供商店與網路價格搜尋連結，不會顯示未驗證的即時價格數字。\n"
+                f"商店查詢：{links['store']}\n價格搜尋參考：{links['price_search']}",
+                ephemeral=True,
+            )
+        except (requests.RequestException, ValueError, KeyError, TypeError, RuntimeError) as error:
+            await interaction.response.send_message(f"❌ 新增失敗：{type(error).__name__}。請稍後再試。", ephemeral=True)
+        return
     if platform != "steam":
-        await interaction.response.send_message(
-            f"ℹ️ 已選擇 {SUPPORTED_PLATFORMS.get(platform, platform)}，但目前尚未接入可驗證的台灣商店搜尋與查價來源。尚未修改清單；Steam 功能不受影響。",
-            ephemeral=True,
-        )
+        await interaction.response.send_message("❌ 不支援的平台。", ephemeral=True)
         return
     product_id = game.strip()
     if not product_id.isdigit():
@@ -435,6 +482,28 @@ async def price_command(interaction: discord.Interaction, game: str):
         await interaction.followup.send("❌ 查價服務暫時無法使用，請稍後再試。", ephemeral=True)
 
 
+@tree.command(name="lookup", description="查詢平台商店與價格參考連結")
+@app_commands.describe(platform="選擇遊戲平台", game="輸入遊戲名稱；Steam 可從搜尋結果選擇")
+@app_commands.choices(platform=PLATFORM_CHOICES)
+@app_commands.autocomplete(game=platform_autocomplete)
+async def lookup_command(interaction: discord.Interaction, platform: str, game: str):
+    platform = platform.lower()
+    query = game.strip()
+    if not query:
+        await interaction.response.send_message("❌ 請輸入遊戲名稱。", ephemeral=True)
+        return
+    if platform == "steam":
+        await price_command(interaction, query)
+        return
+    links = platform_store_links(platform, query)
+    await interaction.response.send_message(
+        f"🎮 **{query}**｜{SUPPORTED_PLATFORMS[platform]}（台灣區參考）\n"
+        "目前只提供商店與網路價格搜尋連結，未驗證即時價格數字；請以商店頁面顯示為準。\n"
+        f"商店查詢：{links['store']}\n價格搜尋參考：{links['price_search']}",
+        ephemeral=True,
+    )
+
+
 @tree.command(name="history", description="查看已記錄的 Steam 遊戲價格歷史")
 @app_commands.describe(game="選擇目前追蹤清單中的遊戲")
 @app_commands.autocomplete(game=tracked_game_autocomplete)
@@ -506,7 +575,8 @@ async def help_command(interaction: discord.Interaction):
         "• `/admincheck` — 檢查管理員權限\n"
         "• `/add platform game` — 先選平台，再搜尋遊戲\n"
         "• `/remove platform game` — 依平台移除追蹤遊戲\n\n"
-        "📌 目前只有 Steam 已接入即時搜尋與查價；PS5、NS2 尚待可靠的台灣商店資料來源確認。\n"
+        "📌 Steam 支援即時搜尋與查價；PS5／NS2 可搜尋遊戲名稱、追蹤、移除及查詢商店／價格參考連結。\n"
+        "📌 PS5／NS2 尚未顯示即時價格數字；需待可靠的台灣價格來源確認。\n"
         "📌 遊戲清單儲存在 GitHub，供自動查價流程使用。"
     )
     await interaction.response.send_message(message, ephemeral=True)
