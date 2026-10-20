@@ -181,7 +181,7 @@ def is_admin(user):
 
 
 async def platform_autocomplete(interaction, current):
-    if not is_admin(interaction.user) or not current.strip():
+    if not current.strip():
         return []
     platform = str(getattr(interaction.namespace, "platform", "steam")).lower()
     # Only Steam has a live, verified search adapter for now.
@@ -406,7 +406,7 @@ async def price_command(interaction: discord.Interaction, game: str):
 
 @tree.command(name="history", description="查看已記錄的 Steam 遊戲價格歷史")
 @app_commands.describe(game="選擇目前追蹤清單中的遊戲")
-@app_commands.autocomplete(game=remove_game_autocomplete)
+@app_commands.autocomplete(game=platform_autocomplete)
 async def history_command(interaction: discord.Interaction, game: str):
     product_id = game.strip()
     if not product_id.isdigit():
