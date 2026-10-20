@@ -10,6 +10,9 @@ import requests
 from discord import app_commands
 from dotenv import load_dotenv
 
+import nintendo
+from nintendo_catalogue import NintendoCatalogueError, get_nintendo_game_by_id, search_nintendo_games
+
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
@@ -221,9 +224,21 @@ async def platform_autocomplete(interaction, current):
     if not current.strip():
         return []
     platform = str(getattr(interaction.namespace, "platform", "steam")).lower()
-    if platform in ("ps5", "ns", "ns2"):
+    if platform == "ps5":
         query = " ".join(current.strip().split())
         return [app_commands.Choice(name=f"搜尋 {SUPPORTED_PLATFORMS[platform]}：{query}"[:100], value=query)]
+    if platform in ("ns", "ns2"):
+        try:
+            results = await asyncio.to_thread(search_nintendo_games, current.strip(), platform)
+            return [
+                app_commands.Choice(
+                    name=f"{item['name']}｜{SUPPORTED_PLATFORMS[platform]}｜數位版"[:100],
+                    value=item["product_id"],
+                )
+                for item in results[:25]
+            ]
+        except (requests.RequestException, ValueError, RuntimeError, TypeError, KeyError):
+            return []
     if platform != "steam":
         return []
     try:
