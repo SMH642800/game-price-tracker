@@ -370,6 +370,29 @@ async def remove_game(interaction: discord.Interaction, platform: str, game: str
 
 
 
+async def tracked_game_autocomplete(interaction, current):
+    """Suggest tracked Steam games to every user without granting watchlist edit access."""
+    query = current.strip().casefold()
+    try:
+        games = await asyncio.to_thread(load_github_watchlist)
+        choices = []
+        for item in games:
+            if platform_of(item) != "steam":
+                continue
+            product_id = product_id_of(item)
+            name = str(item.get("name", ""))
+            if not product_id or not name:
+                continue
+            if query and query not in name.casefold() and query not in product_id.casefold():
+                continue
+            choices.append(
+                app_commands.Choice(name=f"{name} ({product_id})"[:100], value=product_id)
+            )
+        return choices[:25]
+    except (requests.RequestException, ValueError, KeyError, TypeError, RuntimeError):
+        return []
+
+
 @tree.command(name="price", description="查詢 Steam 台灣商店目前價格")
 @app_commands.describe(game="輸入遊戲名稱，並從 Steam 搜尋結果中選擇")
 @app_commands.autocomplete(game=platform_autocomplete)
@@ -406,7 +429,7 @@ async def price_command(interaction: discord.Interaction, game: str):
 
 @tree.command(name="history", description="查看已記錄的 Steam 遊戲價格歷史")
 @app_commands.describe(game="選擇目前追蹤清單中的遊戲")
-@app_commands.autocomplete(game=platform_autocomplete)
+@app_commands.autocomplete(game=tracked_game_autocomplete)
 async def history_command(interaction: discord.Interaction, game: str):
     product_id = game.strip()
     if not product_id.isdigit():
