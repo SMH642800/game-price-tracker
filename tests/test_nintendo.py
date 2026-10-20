@@ -20,10 +20,10 @@ class NintendoDigitalPriceTests(unittest.TestCase):
                 "title_id": "70010000012345",
                 "sales_status": "onsale",
                 "regular_price": {
-                    "currency": "TWD", "raw_value": 1790, "formatted_value": "NT$1,790",
+                    "currency": "TWD", "raw_value": "1790", "amount": "TWD 1,790",
                 },
                 "discount_price": {
-                    "currency": "TWD", "raw_value": 1290, "formatted_value": "NT$1,290",
+                    "currency": "TWD", "raw_value": "1290", "amount": "TWD 1,290",
                 },
             }]
         })
@@ -43,6 +43,29 @@ class NintendoDigitalPriceTests(unittest.TestCase):
             "country": "TW", "lang": "zh", "ids": "70010000012345",
         })
 
+
+    def test_probe_format_string_amounts_are_parsed_for_regular_and_discount_prices(self):
+        session = self.make_session({"prices": [{
+            "title_id": "70010000012345",
+            "sales_status": "onsale",
+            "regular_price": {"currency": "TWD", "raw_value": "1721", "amount": "TWD 1,721"},
+            "discount_price": {"currency": "TWD", "raw_value": "1383", "amount": "TWD 1,383"},
+        }]})
+        result = nintendo.get_nintendo_digital_price("70010000012345", session=session)
+        self.assertEqual(result["regular_price"], 1721.0)
+        self.assertEqual(result["discount_price"], 1383.0)
+        self.assertEqual(result["current_price"], 1383.0)
+
+    def test_preorder_with_string_raw_value_has_price(self):
+        session = self.make_session({"prices": [{
+            "title_id": "70010000130795",
+            "sales_status": "preorder",
+            "regular_price": {"currency": "TWD", "raw_value": "1880", "amount": "TWD 1,880"},
+        }]})
+        result = nintendo.get_nintendo_digital_price("70010000130795", session=session)
+        self.assertTrue(result["available"])
+        self.assertEqual(result["current_price"], 1880.0)
+        self.assertEqual(result["regular_price"], 1880.0)
 
     def test_missing_currency_does_not_infer_twd_from_region(self):
         session = self.make_session({"prices": [{
