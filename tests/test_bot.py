@@ -34,6 +34,22 @@ class WatchlistUpdateTests(unittest.TestCase):
         self.assertFalse(result["price_available"])
         self.assertNotIn("final_price", result)
 
+    @patch.object(bot.requests, "get")
+    def test_missing_or_non_twd_currency_is_not_reported_as_taiwan_price(self, get):
+        for currency in (None, "JPY"):
+            with self.subTest(currency=currency):
+                response = get.return_value
+                response.raise_for_status.return_value = None
+                price = {"final": 9900, "initial": 9900, "discount_percent": 0}
+                if currency is not None:
+                    price["currency"] = currency
+                response.json.return_value = {"123": {"success": True, "data": {
+                    "name": "Example Game", "price_overview": price,
+                }}}
+                result = bot.get_steam_current_price("123")
+                self.assertFalse(result["price_available"])
+                self.assertNotIn("final_price", result)
+
     def test_invalid_steam_id_is_rejected_before_request(self):
         with patch.object(bot.requests, "get") as get:
             with self.assertRaisesRegex(ValueError, "digits only"):
@@ -125,6 +141,51 @@ class WatchlistUpdateTests(unittest.TestCase):
         result = bot.update_github_watchlist(duplicate)
         self.assertFalse(result)
         put.assert_not_called()
+
+    @patch.object(bot, "github_headers", return_value={"Accept": "application/vnd.github+json"})
+    @patch.object(bot.requests, "put")
+    @patch.object(bot, "fetch_github_watchlist_with_sha")
+    def test_nested_mutation_is_detected_and_persisted(self, fetch_watchlist, put, _headers):
+        original = [{"platform": "steam", "product_id": "1", "metadata": {"enabled": True}}]
+        fetch_watchlist.return_value = (original, "current-sha")
+        put.return_value.status_code = 200
+        put.return_value.raise_for_status.return_value = None
+
+        def mutate(games):
+            games[0]["metadata"]["enabled"] = False
+            return games, True
+
+        self.assertTrue(bot.update_github_watchlist(mutate))
+        put.assert_called_once()
+        import base64
+        import json
+        written = json.loads(base64.b64decode(
+            put.call_args.kwargs["json"]["content"]
+        ).decode("utf-8"))
+        self.assertFalse(written[0]["metadata"]["enabled"])
+
+    @patch.object(bot, "github_headers", return_value={"Accept": "application/vnd.github+json"})
+    @patch.object(bot.requests, "put")
+    @patch.object(bot, "fetch_github_watchlist_with_sha")
+    def test_github_422_validation_error_is_not_retried_as_a_conflict(
+        self, fetch_watchlist, put, _headers
+    ):
+        fetch_watchlist.return_value = (
+            [{"platform": "steam", "product_id": "1", "name": "Existing"}],
+            "current-sha",
+        )
+        response = put.return_value
+        response.status_code = 422
+        response.raise_for_status.side_effect = bot.requests.HTTPError("validation failed")
+
+        def mutate(games):
+            games.append({"platform": "steam", "product_id": "2", "name": "New"})
+            return games, True
+
+        with self.assertRaises(bot.requests.HTTPError):
+            bot.update_github_watchlist(mutate)
+        self.assertEqual(fetch_watchlist.call_count, 1)
+        self.assertEqual(put.call_count, 1)
 
     @patch.object(bot, "github_headers", return_value={"Accept": "application/vnd.github+json"})
     @patch.object(bot.requests, "put")
