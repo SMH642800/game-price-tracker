@@ -22,15 +22,5 @@
     "edition": "digital",
     "price_mode": "digital",
     "catalogue_platform_verified": false
-  },
-  {
-    "platform": "nintendo",
-    "store": "nintendo_eshop",
-    "product_id": "70010000097154",
-    "region": "TW",
-    "name": "符文工廠 龍之天地 Nintendo Switch 2 Edition",
-    "edition": "digital",
-    "price_mode": "digital",
-    "catalogue_platform_verified": false
   }
 ]
