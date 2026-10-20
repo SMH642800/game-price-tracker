@@ -86,15 +86,14 @@ class WatchlistUpdateTests(unittest.TestCase):
     def test_add_and_lookup_choices_exclude_ps5_but_remove_keeps_manual_ps5_entries(self):
         add_lookup = {choice.value for choice in bot.ADD_LOOKUP_PLATFORM_CHOICES}
         remove = {choice.value for choice in bot.REMOVE_PLATFORM_CHOICES}
-        self.assertEqual(add_lookup, {"steam", "ns", "ns2"})
+        self.assertEqual(add_lookup, {"steam", "nintendo"})
         self.assertIn("ps5", remove)
         self.assertEqual(bot.SUPPORTED_PLATFORMS["ps5"], "PlayStation 5")
 
-    def test_supported_platforms_distinguish_switch_generations(self):
-        self.assertEqual(bot.SUPPORTED_PLATFORMS["ns"], "Nintendo Switch")
-        self.assertEqual(bot.SUPPORTED_PLATFORMS["ns2"], "Nintendo Switch 2")
+    def test_nintendo_lookup_uses_one_unified_platform_choice(self):
+        self.assertEqual(bot.SUPPORTED_PLATFORMS["nintendo"], "Nintendo Switch／Switch 2")
         values = {choice.value for choice in bot.ADD_LOOKUP_PLATFORM_CHOICES}
-        self.assertEqual(values, {"steam", "ns", "ns2"})
+        self.assertEqual(values, {"steam", "nintendo"})
 
     def test_history_and_separate_price_commands_are_not_registered(self):
         self.assertIsNone(bot.tree.get_command("history"))
