@@ -247,21 +247,13 @@ def main():
     for config in games:
         platform = str(config.get("platform", "steam")).lower()
         if platform != "steam":
-            if platform in {"ps5", "ns", "ns2"} and (
-                config.get("price_mode") == "links_only"
-                or config.get("store") == "link_only"
-            ):
-                print(
-                    f"Skipped link-only platform entry: "
-                    f"{config.get('name', 'unknown game')} ({platform})"
-                )
-                continue
-            failure = (
-                f"Price provider is not configured for platform '{platform}' "
-                f"({config.get('name', 'unknown game')})"
+            # Discord lookup supports Nintendo digital prices, but the scheduled
+            # discount-notification provider is still Steam-only. Never send a
+            # Nintendo NSUID to the Steam API or fail the scheduled run.
+            print(
+                f"Skipped scheduled price check: {config.get('name', 'unknown game')} "
+                f"({platform}); scheduled notifications currently support Steam only"
             )
-            print(f"ERROR: {failure}")
-            failures.append(failure)
             continue
 
         try:
