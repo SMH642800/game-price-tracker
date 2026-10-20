@@ -444,7 +444,7 @@ async def handle_nintendo_price_query(interaction: discord.Interaction, platform
             )
         elif not result["available"] or result["current_price"] is None:
             message = (
-                f"🎮 **{entry['name']}**｜{SUPPORTED_PLATFORMS[platform]} 台灣數位版\n"
+                f"🎮 **{entry['name']}**｜{display_platform} 台灣數位版\n"
                 "目前沒有可用的台灣數位售價；不會以其他地區或實體版價格代替。\n"
                 f"{result['url']}"
             )
@@ -452,7 +452,7 @@ async def handle_nintendo_price_query(interaction: discord.Interaction, platform
             current = result["current_price"]
             regular = result["regular_price"]
             message = (
-                f"🎮 **{entry['name']}**｜{SUPPORTED_PLATFORMS[platform]} 台灣數位版\n"
+                f"🎮 **{entry['name']}**｜{display_platform} 台灣數位版\n"
                 f"目前價格：**{result['currency']} {current:,.0f}**\n"
             )
             if regular is not None and regular > current:
