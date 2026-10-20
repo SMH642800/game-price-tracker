@@ -1,8 +1,8 @@
-"""Cached search helpers for the Nintendo Taiwan software catalogue.
+"""Cached search helpers for Nintendo regional software catalogues.
 
-The catalogue endpoint is undocumented. Use this module only with the existing
-manual probe/cache workflow; a catalogue match is not proof of API stability or
-permission for automated reuse.
+The catalogue endpoints are undocumented. The loader prefers local caches and
+falls back to the repository's weekly cache; this does not establish permission
+for automated reuse or guarantee API stability.
 """
 from __future__ import annotations
 
