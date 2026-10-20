@@ -27,7 +27,7 @@ TIMEOUT_SECONDS = 15
 MAX_PAGES = 250
 CACHE_TTL_SECONDS = 24 * 60 * 60
 CACHE_SCHEMA_VERSION = 1
-DEFAULT_CACHE_PATH = Path(".cache/nintendo_tw_catalogue.json")
+DEFAULT_CACHE_PATH = Path(__file__).resolve().parents[1] / ".cache" / "nintendo_tw_catalogue.json"
 TEST_QUERIES = (
     "時之笛",
     "亰都幻都",
