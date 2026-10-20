@@ -72,9 +72,18 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m "Update notification state"
             TRACKER_BRANCH="$GITHUB_REF_NAME"
-            git fetch origin "$TRACKER_BRANCH"
-            git rebase "origin/$TRACKER_BRANCH"
-            git push origin "HEAD:$TRACKER_BRANCH"
+            for attempt in 1 2 3; do
+              git fetch origin "$TRACKER_BRANCH"
+              git rebase "origin/$TRACKER_BRANCH"
+              if git push origin "HEAD:$TRACKER_BRANCH"; then
+                break
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                echo "Push failed after 3 attempts" >&2
+                exit 1
+              fi
+              echo "Push raced with another workflow; retrying (attempt $((attempt + 1))/3)."
+            done
           else
             echo "Notification state unchanged"
           fi
