@@ -105,8 +105,8 @@ def search_nintendo_games(
     query: str, platform: str, *, rows: list[dict[str, Any]] | None = None, limit: int = 25
 ) -> list[dict[str, Any]]:
     """Return real catalogue entries with stable NSUIDs, deduplicated by ID."""
-    if platform not in {"ns", "ns2"}:
-        raise ValueError("Nintendo catalogue search supports ns and ns2 only")
+    if platform not in {"ns", "ns2", "nintendo"}:
+        raise ValueError("Nintendo catalogue search supports nintendo, ns and ns2")
     needle = normalize(query)
     if not needle:
         return []
