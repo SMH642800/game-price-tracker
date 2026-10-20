@@ -10,7 +10,7 @@ A Discord-managed game price tracker. The scheduled GitHub Actions workflow chec
 - NS and NS2 use cached Nintendo catalogue results and stable NSUIDs. Their current digital-price adapter calls an undocumented endpoint; this is experimental, and permission for automated reuse has **not** been confirmed.
 - NS and NS2 remain distinct. Missing Nintendo platform metadata is shown as unverified; title similarity alone must not confirm a generation or edition.
 - PS5 is out of scope for automated lookup and adding new watchlist entries. Existing manually maintained PS5 rows remain visible in `/list` and removable through `/remove`.
-- Scheduled discount notifications are Steam-only. Non-Steam watchlist rows are skipped, not sent to Steam APIs.
+- Scheduled discount notifications support Steam and eligible Nintendo Switch / Switch 2 digital products in Taiwan. Nintendo price checks use an undocumented endpoint and remain experimental; non-supported rows are skipped rather than sent to Steam APIs.
 - Notification state is stored in `notification_state.json`; invalid JSON stops the run rather than silently resetting notification state.
 - Partial price-check failures produce a failed workflow status while successful notification state is still saved. GitHub watchlist updates re-read the current file and retry explicit SHA conflicts to reduce lost updates.
 

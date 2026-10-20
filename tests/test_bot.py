@@ -103,6 +103,67 @@ class WatchlistUpdateTests(unittest.TestCase):
 
     @patch.object(bot, "github_headers", return_value={"Accept": "application/vnd.github+json"})
     @patch.object(bot.requests, "put")
+    @patch.object(bot.requests, "get")
+    def test_remove_notification_state_entries_clears_removed_nintendo_game(self, get, put, _headers):
+        import base64
+        import json
+
+        state = {
+            "ns2:nintendo_eshop:TW:70010000012345": {"discount": 25, "final_price": 1200},
+            "steam:steam:TW:123": {"discount": 10, "final_price": 90},
+        }
+        get.return_value.status_code = 200
+        get.return_value.raise_for_status.return_value = None
+        get.return_value.json.return_value = {
+            "content": base64.b64encode(json.dumps(state).encode()).decode(),
+            "sha": "state-sha",
+        }
+        put.return_value.status_code = 200
+        put.return_value.raise_for_status.return_value = None
+
+        removed_count = bot.remove_notification_state_entries([{
+            "platform": "ns2", "store": "nintendo_eshop", "product_id": "70010000012345",
+            "region": "TW", "name": "Nintendo Game",
+        }])
+
+        self.assertEqual(removed_count, 1)
+        payload = put.call_args.kwargs["json"]
+        saved = json.loads(base64.b64decode(payload["content"]).decode())
+        self.assertNotIn("ns2:nintendo_eshop:TW:70010000012345", saved)
+        self.assertIn("steam:steam:TW:123", saved)
+
+    @patch.object(bot, "github_headers", return_value={"Accept": "application/vnd.github+json"})
+    @patch.object(bot.requests, "put")
+    @patch.object(bot.requests, "get")
+    def test_remove_notification_state_entries_handles_unified_nintendo_platform(self, get, put, _headers):
+        import base64
+        import json
+
+        state = {
+            "nintendo:nintendo_eshop:TW:70010000012345": {"discount": 25, "final_price": 1200},
+            "steam:steam:TW:123": {"discount": 10, "final_price": 90},
+        }
+        get.return_value.status_code = 200
+        get.return_value.raise_for_status.return_value = None
+        get.return_value.json.return_value = {
+            "content": base64.b64encode(json.dumps(state).encode()).decode(),
+            "sha": "state-sha",
+        }
+        put.return_value.status_code = 200
+        put.return_value.raise_for_status.return_value = None
+
+        removed_count = bot.remove_notification_state_entries([{
+            "platform": "nintendo", "store": "nintendo_eshop", "product_id": "70010000012345",
+            "region": "TW", "name": "Nintendo Game",
+        }])
+
+        self.assertEqual(removed_count, 1)
+        saved = json.loads(base64.b64decode(put.call_args.kwargs["json"]["content"]).decode())
+        self.assertNotIn("nintendo:nintendo_eshop:TW:70010000012345", saved)
+        self.assertIn("steam:steam:TW:123", saved)
+
+    @patch.object(bot, "github_headers", return_value={"Accept": "application/vnd.github+json"})
+    @patch.object(bot.requests, "put")
     @patch.object(bot, "fetch_github_watchlist_with_sha")
     def test_add_mutation_writes_updated_list(self, fetch_watchlist, put, _headers):
         original = [
@@ -236,6 +297,34 @@ class WatchlistUpdateTests(unittest.TestCase):
         sleep.assert_called_once()
 
 class NintendoCommandTests(unittest.IsolatedAsyncioTestCase):
+
+    async def test_remove_unified_nintendo_platform_removes_ns2_row_and_cleans_state(self):
+        interaction = AsyncMock()
+        interaction.user.id = 123
+
+        watchlist = [
+            {"platform": "ns2", "store": "nintendo_eshop", "product_id": "70010000012345", "name": "Switch 2 Game"},
+            {"platform": "steam", "store": "steam", "product_id": "123", "name": "Steam Game"},
+        ]
+        captured = {}
+
+        def apply_mutation(mutator):
+            updated, removed = mutator(watchlist)
+            captured["updated"] = updated
+            captured["removed"] = removed
+            return removed
+
+        with patch.object(bot, "is_admin", return_value=True), \
+             patch.object(bot, "update_github_watchlist", side_effect=apply_mutation), \
+             patch.object(bot, "remove_notification_state_entries", return_value=1) as cleanup:
+            await bot.remove_game.callback(interaction, "nintendo", "70010000012345")
+
+        self.assertEqual([game["product_id"] for game in captured["updated"]], ["123"])
+        self.assertEqual(len(captured["removed"]), 1)
+        cleanup.assert_called_once_with(captured["removed"])
+        message = interaction.followup.send.await_args.args[0]
+        self.assertIn("已清除 1 筆通知狀態", message)
+
     async def test_nintendo_autocomplete_returns_catalogue_ids_not_raw_query(self):
         interaction = AsyncMock()
         interaction.namespace.platform = "ns"
