@@ -161,7 +161,7 @@ def load_cached_catalogue(*, now: float | None = None) -> list[dict[str, Any]]:
     if rows is not None:
         return rows
     raise NintendoCatalogueError(
-        "找不到有效的 Nintendo 台灣目錄快取，且無法取得 GitHub 上的每週快取；"
+        "Nintendo 台灣目錄快取已過期、缺失或格式不正確，且無法取得 GitHub 上的每週快取；"
         "請確認每週更新 Action 已成功，或執行 "
         "python scripts/probe_nintendo_sources.py --refresh-cache"
     )
