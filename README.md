@@ -41,8 +41,6 @@ The Bot must not present unverified sources or inferred prices as directly obser
 - **Steam:** Steam App Details provides current price. `/price` fetches the current Taiwan-store price.
 - **PS5, NS, and NS2:** v1 supports title-based tracking plus store and web price-search links, without inventing product IDs or numeric prices. Console links are references, not verified numeric prices. For Nintendo, digital and physical prices must remain separate, and every price must identify its region, currency, product/edition, source, and retrieval time. Automated numeric console pricing remains disabled until reliable sources and permitted use are verified. A first isolated Nintendo digital-price adapter and mocked tests exist on the PR branch, but they are not wired into Discord commands. Physical game prices require a separate approved retailer source.
 
-SteamDB research note: its [FAQ](https://steamdb.info/faq/) does not offer a generally available public API for this use and disallows unapproved automated scraping. This project does not scrape or import SteamDB data. Do not present third-party values as locally verified current prices.
-
 Legacy Steam entries using `app_id` remain readable. New entries should use `product_id` and explicit `store` / `region` values. Notification-state keys are namespaced as `platform:store:region:product_id`.
 
 ## Configuration
