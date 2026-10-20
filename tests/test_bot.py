@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import bot
 
@@ -74,6 +74,15 @@ class WatchlistUpdateTests(unittest.TestCase):
         result = bot.update_github_watchlist(duplicate)
         self.assertFalse(result)
         put.assert_not_called()
+
+
+class CommandRoutingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_steam_lookup_uses_shared_price_handler(self):
+        interaction = AsyncMock()
+        with patch.object(bot, "handle_steam_price_query", new_callable=AsyncMock) as handler:
+            await bot.lookup_command.callback(interaction, "steam", "123")
+        handler.assert_awaited_once_with(interaction, "123")
+        interaction.response.send_message.assert_not_awaited()
 
 
 if __name__ == "__main__":
