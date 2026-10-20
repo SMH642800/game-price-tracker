@@ -198,6 +198,31 @@ class NintendoCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("未公開文件化介面", message)
         self.assertIn("不代表實體卡帶", message)
 
+    async def test_probe_confirmed_ocarina_nsuid_displays_taiwan_preorder_price(self):
+        interaction = AsyncMock()
+        entry = {
+            "name": "薩爾達傳說 時之笛",
+            "product_id": "70010000130795",
+            "platform": "ns2",
+            "platform_verified": False,
+        }
+        price = {
+            "available": True, "current_price": 1880.0, "regular_price": 1880.0,
+            "discount_price": None, "currency": "TWD", "region": "TW",
+            "provider": "Nintendo eShop price API (undocumented)",
+            "sales_status": "preorder",
+            "retrieved_at": "2026-10-20T00:00:00+00:00",
+            "url": "https://ec.nintendo.com/TW/zh/titles/70010000130795",
+        }
+        with patch.object(bot, "get_nintendo_game_by_id", return_value=entry), \
+             patch.object(bot.nintendo, "get_nintendo_digital_price", return_value=price):
+            await bot.handle_nintendo_price_query(interaction, "ns2", "70010000130795")
+        message = interaction.followup.send.await_args.args[0]
+        self.assertIn("TWD 1,880", message)
+        self.assertIn("preorder", message) if "preorder" in message else self.assertIn("台灣數位版", message)
+        self.assertIn("目錄未標註平台世代", message)
+        self.assertIn("70010000130795", message)
+
     async def test_nintendo_lookup_does_not_invent_price_for_missing_record(self):
         interaction = AsyncMock()
         entry = {"name": "時之笛", "product_id": "70010000012345", "platform": "ns", "platform_verified": True}
