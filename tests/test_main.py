@@ -125,7 +125,7 @@ class NotificationStateTests(unittest.TestCase):
         send.assert_not_called()
         self.assertEqual(json.loads(self.state_path.read_text(encoding="utf-8")), {})
 
-    def test_all_non_steam_entries_are_skipped_without_failing_scheduled_run(self):
+    def test_link_only_entries_are_skipped_and_nintendo_digital_sale_notifies(self):
         self.write_watchlist([
             {
                 "platform": "ps5", "store": "link_only", "product_id": "game a",
@@ -141,11 +141,31 @@ class NotificationStateTests(unittest.TestCase):
                 "price_mode": "digital",
             },
         ])
-        with patch.object(main, "get_steam_price") as get_price, \
+        nintendo_game = {
+            "name": "Switch 2 Digital Game",
+            "available": True,
+            "currency": "TWD",
+            "regular_price": 1790.0,
+            "current_price": 1290.0,
+            "discount": 28,
+            "url": "https://ec.nintendo.com/TW/zh/titles/70010000012345",
+        }
+        with patch.object(main, "get_steam_price") as get_steam_price, \
+             patch.object(main, "get_nintendo_price", return_value=nintendo_game) as get_nintendo_price, \
              patch.object(main, "send_discord_message") as send:
             main.main()
-        get_price.assert_not_called()
-        send.assert_not_called()
+        get_steam_price.assert_not_called()
+        get_nintendo_price.assert_called_once()
+        send.assert_called_once()
+        message = send.call_args.args[0]
+        self.assertIn("Nintendo Switch 特價通知", message)
+        self.assertIn("TWD 1,290", message)
+        self.assertIn("TWD 1,790", message)
+        saved = json.loads(self.state_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            saved["ns2:nintendo_eshop:TW:70010000012345"],
+            {"discount": 28, "final_price": 1290.0},
+        )
 
     def test_successful_notification_state_survives_partial_failure(self):
         self.write_watchlist([
