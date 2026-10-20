@@ -42,13 +42,10 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
 
-      - name: Prepare notification history
+      - name: Prepare notification state
         run: |
           if [ ! -f notification_state.json ]; then
             echo '{}' > notification_state.json
-          fi
-          if [ ! -f price_history.json ]; then
-            echo '{}' > price_history.json
           fi
 
       - name: Run selected mode
@@ -64,20 +61,20 @@ jobs:
           fi
 
       # Save successful per-game state updates even if another game failed.
-      - name: Save notification history
+      - name: Save notification state
         if: always() && steps.run_tracker.outcome != 'skipped'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add notification_state.json price_history.json
+          git add notification_state.json
           if ! git diff --cached --quiet; then
-            git commit -m "Update notification history"
+            git commit -m "Update notification state"
             git fetch origin main
             git rebase origin/main
             git push origin HEAD:main
           else
-            echo "Notification history unchanged"
+            echo "Notification state unchanged"
           fi
 
       - name: Notify Discord on failure
@@ -98,7 +95,7 @@ jobs:
           詳細紀錄：${RUN_URL}"
 
           PAYLOAD=$(jq -n --arg content "$MESSAGE" '{content: $content}')
-          curl --fail-with-body --silent --show-error             --max-time 15             -H "Content-Type: application/json"             -X POST             -d "$PAYLOAD"             "$DISCORD_WEBHOOK_URL"
+          curl --fail-with-body --silent --show-error --max-time 15 -H "Content-Type: application/json" -X POST -d "$PAYLOAD" "$DISCORD_WEBHOOK_URL"
 
       - name: Report successful run to Healthchecks
         if: success()
