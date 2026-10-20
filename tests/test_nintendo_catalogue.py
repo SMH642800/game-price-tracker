@@ -60,6 +60,19 @@ class NintendoCatalogueSearchTests(unittest.TestCase):
         self.assertEqual(len(result), 25)
         self.assertEqual(len({item["product_id"] for item in result}), 25)
 
+    def test_unified_nintendo_search_returns_both_generations_and_unknown_platform(self):
+        rows = [
+            {"title": "Example Original", "nsuid": "70010000000001", "platform": "Nintendo Switch"},
+            {"title": "Example Switch 2 Edition", "nsuid": "70010000000002", "platform": "Nintendo Switch 2"},
+            {"title": "Example Unverified", "nsuid": "70010000000003", "platform": None},
+        ]
+        result = catalogue.search_nintendo_games("Example", "nintendo", rows=rows)
+        self.assertEqual([item["product_id"] for item in result], [
+            "70010000000001", "70010000000002", "70010000000003",
+        ])
+        self.assertEqual([item["platform"] for item in result], ["ns", "ns2", "nintendo"])
+        self.assertFalse(result[2]["platform_verified"])
+
     def test_invalid_platform_is_rejected(self):
         with self.assertRaises(ValueError):
             catalogue.search_nintendo_games("Example", "ps5", rows=[])
