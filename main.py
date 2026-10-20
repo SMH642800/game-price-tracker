@@ -6,6 +6,9 @@ from pathlib import Path
 from datetime import datetime, timezone, timedelta
 import requests
 import steam
+from dotenv import load_dotenv
+
+load_dotenv()
 
 TAIWAN_TZ = timezone(timedelta(hours=8))
 
