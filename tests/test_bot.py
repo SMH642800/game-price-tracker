@@ -219,6 +219,7 @@ class NintendoCommandTests(unittest.IsolatedAsyncioTestCase):
             await bot.handle_nintendo_price_query(interaction, "ns2", "70010000130795")
         message = interaction.followup.send.await_args.args[0]
         self.assertIn("TWD 1,880", message)
+        self.assertIn("預購中", message)
         self.assertIn("台灣數位版", message)
         self.assertIn("目錄未標註平台世代", message)
         self.assertIn("70010000130795", message)
