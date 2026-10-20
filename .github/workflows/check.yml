@@ -76,3 +76,23 @@ jobs:
           else
             echo "Notification history unchanged"
           fi
+
+      - name: Notify Discord on failure
+        if: failure()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          MESSAGE="⚠️ Game Price Tracker 執行失敗！
+          分支：${BRANCH}
+          請查看錯誤紀錄：${RUN_URL}"
+
+          PAYLOAD=$(jq -n --arg content "$MESSAGE" \
+            '{content: $content}')
+
+          curl --fail-with-body --silent --show-error \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d "$PAYLOAD" \
+            "$DISCORD_WEBHOOK_URL"
