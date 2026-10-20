@@ -7,6 +7,8 @@ permission for automated reuse.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import time
 import unicodedata
 from pathlib import Path
@@ -22,6 +24,10 @@ MAX_PAGES = 250
 CACHE_TTL_SECONDS = 8 * 24 * 60 * 60
 CACHE_PATH = Path(__file__).resolve().parent / ".cache" / "nintendo_tw_catalogue.json"
 HK_CACHE_PATH = Path(__file__).resolve().parent / ".cache" / "nintendo_hk_catalogue.json"
+REMOTE_CACHE_URLS = {
+    "TW": "https://raw.githubusercontent.com/SMH642800/game-price-tracker/main/.cache/nintendo_tw_catalogue.json",
+    "HK": "https://raw.githubusercontent.com/SMH642800/game-price-tracker/main/.cache/nintendo_hk_catalogue.json",
+}
 
 # Curated fallback entries for verified digital editions omitted by the bulk Taiwan
 # catalogue endpoint. These entries are kept separate from downloaded cache data;
@@ -81,51 +87,93 @@ def platform_matches(row: dict[str, Any], platform: str) -> bool:
     return platform in {"nintendo", "ns", "ns2"}
 
 
-def load_cached_catalogue(*, now: float | None = None) -> list[dict[str, Any]]:
-    """Read the probe-generated cache; do not start a multi-minute crawl in autocomplete."""
-    current = time.time() if now is None else now
-    try:
-        payload = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
-    except FileNotFoundError as exc:
-        raise NintendoCatalogueError(
-            "找不到 Nintendo 目錄快取；請先在專案根目錄執行 "
-            "python scripts/probe_nintendo_sources.py"
-        ) from exc
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise NintendoCatalogueError("Nintendo 目錄快取無法讀取，請重新執行來源探測腳本") from exc
-
-    fetched_at = payload.get("fetched_at") if isinstance(payload, dict) else None
-    rows = payload.get("rows") if isinstance(payload, dict) else None
+def _fresh_cache_rows(payload: Any, *, now: float) -> list[dict[str, Any]] | None:
+    if not isinstance(payload, dict):
+        return None
+    fetched_at = payload.get("fetched_at")
+    rows = payload.get("rows")
     if (
-        not isinstance(fetched_at, (int, float))
-        or current - fetched_at < 0
-        or current - fetched_at > CACHE_TTL_SECONDS
+        payload.get("schema_version") != 1
+        or not isinstance(fetched_at, (int, float))
+        or now - fetched_at < 0
+        or now - fetched_at > CACHE_TTL_SECONDS
         or not isinstance(rows, list)
         or not all(isinstance(row, dict) for row in rows)
     ):
-        raise NintendoCatalogueError(
-            "Nintendo 目錄快取已過期或格式不正確；請執行 "
-            "python scripts/probe_nintendo_sources.py --refresh-cache"
-        )
+        return None
     return rows
 
 
-def load_optional_hk_catalogue(*, now: float | None = None) -> list[dict[str, Any]]:
-    """Read a fresh optional HK catalogue cache; absence/expiry must not break TW lookup."""
-    current = time.time() if now is None else now
+def _read_local_cache(path: Path, *, now: float) -> list[dict[str, Any]] | None:
     try:
-        payload = json.loads(HK_CACHE_PATH.read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8"))
     except (FileNotFoundError, OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return []
-    fetched_at = payload.get("fetched_at") if isinstance(payload, dict) else None
-    rows = payload.get("rows") if isinstance(payload, dict) else None
-    if (
-        not isinstance(fetched_at, (int, float))
-        or current - fetched_at < 0
-        or current - fetched_at > CACHE_TTL_SECONDS
-        or not isinstance(rows, list)
-        or not all(isinstance(row, dict) for row in rows)
-    ):
+        return None
+    return _fresh_cache_rows(payload, now=now)
+
+
+def _atomic_write_cache(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent)
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False)
+        os.replace(temporary_name, path)
+    finally:
+        try:
+            os.unlink(temporary_name)
+        except FileNotFoundError:
+            pass
+
+
+def _download_cache(region: str, path: Path, *, now: float) -> list[dict[str, Any]] | None:
+    """Fetch the latest weekly cache from the repository and save it locally."""
+    try:
+        response = requests.get(
+            REMOTE_CACHE_URLS[region],
+            headers={"Accept": "application/json"},
+            timeout=TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except (requests.RequestException, ValueError, TypeError):
+        return None
+    rows = _fresh_cache_rows(payload, now=now)
+    if rows is None:
+        return None
+    try:
+        _atomic_write_cache(path, payload)
+    except OSError:
+        # A valid remote response can still be used even if local persistence fails.
+        pass
+    return rows
+
+
+def load_cached_catalogue(*, now: float | None = None) -> list[dict[str, Any]]:
+    """Use a fresh local cache first, then fetch the latest weekly GitHub cache."""
+    current = time.time() if now is None else now
+    rows = _read_local_cache(CACHE_PATH, now=current)
+    if rows is not None:
+        return rows
+    rows = _download_cache("TW", CACHE_PATH, now=current)
+    if rows is not None:
+        return rows
+    raise NintendoCatalogueError(
+        "找不到有效的 Nintendo 台灣目錄快取，且無法取得 GitHub 上的每週快取；"
+        "請確認每週更新 Action 已成功，或執行 "
+        "python scripts/probe_nintendo_sources.py --refresh-cache"
+    )
+
+
+def load_optional_hk_catalogue(*, now: float | None = None) -> list[dict[str, Any]]:
+    """Load the optional HK catalogue locally or from the latest weekly GitHub cache."""
+    current = time.time() if now is None else now
+    rows = _read_local_cache(HK_CACHE_PATH, now=current)
+    if rows is None:
+        rows = _download_cache("HK", HK_CACHE_PATH, now=current)
+    if rows is None:
         return []
     normalized = []
     for row in rows:
