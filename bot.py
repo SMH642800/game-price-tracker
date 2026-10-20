@@ -67,7 +67,10 @@ def get_steam_current_price(product_id):
         timeout=15,
     )
     response.raise_for_status()
-    result = response.json().get(str(product_id), {})
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise ValueError("Steam API response must be a JSON object")
+    result = payload.get(str(product_id), {})
     if not isinstance(result, dict) or not result.get("success"):
         return None
     data = result.get("data", {})
@@ -80,13 +83,22 @@ def get_steam_current_price(product_id):
             "price_available": False,
             "url": f"https://store.steampowered.com/app/{product_id}/",
         }
+    try:
+        final_minor = int(price["final"])
+        initial_minor = int(price["initial"])
+        discount = int(price.get("discount_percent", 0))
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError("Steam API returned malformed price fields") from error
+    if final_minor < 0 or initial_minor < 0 or not 0 <= discount <= 100:
+        raise ValueError("Steam API returned out-of-range price fields")
+
     return {
         "name": data.get("name", f"Steam App {product_id}"),
         "price_available": True,
-        "currency": price.get("currency", "TWD"),
-        "final_price": price.get("final", 0) / 100,
-        "initial_price": price.get("initial", 0) / 100,
-        "discount": price.get("discount_percent", 0),
+        "currency": price.get("currency") or "TWD",
+        "final_price": final_minor / 100,
+        "initial_price": initial_minor / 100,
+        "discount": discount,
         "url": f"https://store.steampowered.com/app/{product_id}/",
     }
 
@@ -131,8 +143,15 @@ def search_steam_games(query):
     )
     response.raise_for_status()
     data = response.json()
+    if not isinstance(data, dict):
+        raise ValueError("Steam search response must be a JSON object")
+    items = data.get("items", [])
+    if not isinstance(items, list):
+        raise ValueError("Steam search response items must be a list")
     results = []
-    for item in data.get("items", [])[:25]:
+    for item in items[:25]:
+        if not isinstance(item, dict):
+            continue
         product_id = str(item.get("id", ""))
         name = item.get("name", "")
         if product_id.isdigit() and name:
@@ -147,11 +166,15 @@ def get_steam_game(product_id):
         timeout=15,
     )
     response.raise_for_status()
-    result = response.json().get(str(product_id), {})
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise ValueError("Steam API response must be a JSON object")
+    result = payload.get(str(product_id), {})
     if not isinstance(result, dict) or not result.get("success"):
         return None
     data = result.get("data", {})
-    return data.get("name") if isinstance(data, dict) else None
+    name = data.get("name") if isinstance(data, dict) else None
+    return name if isinstance(name, str) and name.strip() else None
 
 
 def platform_of(game):
@@ -212,7 +235,7 @@ async def platform_autocomplete(interaction, current):
             )
             for item in results[:25]
         ]
-    except (requests.RequestException, ValueError, KeyError, TypeError):
+    except (requests.RequestException, ValueError, KeyError, TypeError, AttributeError):
         return []
 
 
@@ -442,7 +465,7 @@ async def handle_steam_price_query(interaction: discord.Interaction, product_id:
                 f"{result['url']}"
             )
         await interaction.followup.send(message, ephemeral=True)
-    except (requests.RequestException, ValueError, KeyError, TypeError) as error:
+    except (requests.RequestException, ValueError, KeyError, TypeError, AttributeError) as error:
         print(f"Steam price query failed for {product_id}: {type(error).__name__}: {error}")
         await interaction.followup.send("❌ 查價服務暫時無法使用，請稍後再試。", ephemeral=True)
 
@@ -483,13 +506,15 @@ async def help_command(interaction: discord.Interaction):
         "**一般指令**\n"
         "• `/ping` — 測試 Bot 是否正常運作\n"
         "• `/list` — 查看目前追蹤的遊戲（依平台分組）\n"
+        "• `/price game` — 查詢 Steam 台灣商店目前價格\n"
+        "• `/lookup platform game` — 查詢平台商店與價格搜尋連結\n"
         "• `/help` — 顯示使用說明\n\n"
         "**管理員限定指令**\n"
         "• `/admincheck` — 檢查管理員權限\n"
         "• `/add platform game` — 先選平台，再搜尋遊戲\n"
         "• `/remove platform game` — 依平台移除追蹤遊戲\n\n"
         "📌 Steam 支援即時搜尋與查價；PS5／NS／NS2 可搜尋遊戲名稱、追蹤、移除及查詢商店／價格參考連結。\n"
-        "📌 PS5／NS2 尚未顯示即時價格數字；需待可靠的台灣價格來源確認。\n"
+        "📌 PS5／NS／NS2 尚未顯示已驗證的即時價格數字；需待可靠的台灣價格來源確認。\n"
         "📌 遊戲清單儲存在 GitHub，供自動查價流程使用。"
     )
     await interaction.response.send_message(message, ephemeral=True)
