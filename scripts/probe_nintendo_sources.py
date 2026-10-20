@@ -39,6 +39,7 @@ TEST_QUERIES = (
     "亰都幻都",
     "京都幻都",
     "Kyoto Xanadu",
+    "空之軌跡",
 )
 
 
