@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Manual, low-rate feasibility probe for Nintendo Taiwan catalogue/prices.
 
-The catalogue is cached locally for 24 hours to avoid repeatedly fetching every
-page during development. This diagnostic is not a production scraper: it does
-not run in CI, does not enable price lookup in the Discord bot, and does not
-establish Nintendo permission for automated reuse.
+The catalogue is cached locally for eight days to support weekly refreshes.
+The weekly GitHub Actions workflow uses --catalogue-only to refresh TW/HK caches
+without price queries. Successful responses do not establish permission for reuse.
 """
 from __future__ import annotations
 
@@ -31,7 +30,7 @@ REQUEST_DELAY_SECONDS = 0.2
 TIMEOUT_SECONDS = 15
 WARNING_PAGES = 800
 MAX_PAGES = 1000
-CACHE_TTL_SECONDS = 24 * 60 * 60
+CACHE_TTL_SECONDS = 8 * 24 * 60 * 60
 CACHE_SCHEMA_VERSION = 1
 DEFAULT_CACHE_PATH = Path(__file__).resolve().parents[1] / ".cache" / "nintendo_tw_catalogue.json"
 TEST_QUERIES = (
@@ -184,6 +183,10 @@ def load_catalogue(
         "request_seconds": round(request_seconds, 3),
         "sleep_seconds": round(sleep_seconds, 3),
     }
+    if total > 0 and len(rows) < total:
+        raise ValueError(f"Incomplete catalogue: received {len(rows)} rows but API reported {total}")
+    if total > 0 and not rows:
+        raise ValueError("Catalogue reported products but returned no rows")
     if cache_path is not None:
         _write_cache(cache_path, rows, summary, time.time())
     return rows, summary
@@ -247,6 +250,10 @@ def parse_args() -> argparse.Namespace:
         help="neither read nor write a local catalogue cache",
     )
     parser.add_argument(
+        "--catalogue-only", action="store_true",
+        help="refresh the selected regional catalogue without price probes",
+    )
+    parser.add_argument(
         "--country", choices=("TW", "HK"), default="TW",
         help="catalogue region to probe; price lookups still query Taiwan (TW)",
     )
@@ -281,6 +288,15 @@ def main() -> int:
             "catalogue": catalogue_summary,
             "queries": {},
         }
+
+        if args.catalogue_only:
+            output["queries_skipped"] = "catalogue-only mode; no price API requests made"
+            output["timing"] = {
+                "catalogue_elapsed_seconds": round(catalogue_elapsed, 3),
+                "total_elapsed_seconds": round(time.perf_counter() - run_started, 3),
+            }
+            print(json.dumps(output, ensure_ascii=False, indent=2))
+            return 0
 
         for index, query in enumerate(TEST_QUERIES):
             matches = matching_rows(rows, query)
