@@ -11,6 +11,8 @@ TAIWAN_TZ = timezone(timedelta(hours=8))
 
 WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 STATE_PATH = Path("notification_state.json")
+HISTORY_PATH = Path("price_history.json")
+HISTORY_LIMIT_PER_GAME = 365
 WATCHLIST_PATH = Path("games_track_list.json")
 
 STEAM_API_URL = (
@@ -118,6 +120,67 @@ def save_notification_state(state):
         raise
 
 
+
+def load_price_history():
+    """Load persisted price samples; fail closed rather than erase history."""
+    try:
+        with HISTORY_PATH.open("r", encoding="utf-8") as file:
+            history = json.load(file)
+    except FileNotFoundError:
+        return {}
+    except json.JSONDecodeError as error:
+        raise RuntimeError("price_history.json is invalid JSON; refusing to reset price history") from error
+    if not isinstance(history, dict):
+        raise RuntimeError("price_history.json must contain a JSON object")
+    for key, samples in history.items():
+        if not isinstance(key, str) or not isinstance(samples, list):
+            raise RuntimeError("price_history.json must map product keys to sample arrays")
+        if any(not isinstance(sample, dict) for sample in samples):
+            raise RuntimeError(f"Invalid price history sample for {key}")
+    return history
+
+
+def save_price_history(history):
+    """Atomically persist price history so interrupted writes cannot corrupt it."""
+    HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_path = tempfile.mkstemp(prefix=".price_history.", suffix=".tmp", dir=str(HISTORY_PATH.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as file:
+            json.dump(history, file, ensure_ascii=False, indent=2)
+            file.write("\n")
+            file.flush()
+            os.fsync(file.fileno())
+        os.replace(temp_path, HISTORY_PATH)
+    except Exception:
+        try:
+            os.unlink(temp_path)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def record_price_sample(history, state_key, game, checked_at=None):
+    """Keep one observation per product per Taiwan calendar day, up to 365 days."""
+    checked_at = checked_at or datetime.now(timezone.utc)
+    if checked_at.tzinfo is None:
+        checked_at = checked_at.replace(tzinfo=timezone.utc)
+    checked_at = checked_at.astimezone(timezone.utc)
+    sample = {
+        "timestamp": checked_at.isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "date_taiwan": checked_at.astimezone(TAIWAN_TZ).date().isoformat(),
+        "currency": str(game.get("currency", "")),
+        "final_price": float(game["final_price"]),
+        "initial_price": float(game["initial_price"]),
+        "discount": int(game.get("discount", 0)),
+    }
+    samples = history.setdefault(state_key, [])
+    if samples and samples[-1].get("date_taiwan") == sample["date_taiwan"]:
+        samples[-1] = sample
+    else:
+        samples.append(sample)
+    history[state_key] = samples[-HISTORY_LIMIT_PER_GAME:]
+
+
 def get_steam_discount_expiration(app_id, region="TW"):
     url = f"https://store.steampowered.com/app/{app_id}/"
 
@@ -208,6 +271,7 @@ def format_time_remaining(expiration):
 
 def main():
     notification_state = load_notification_state()
+    price_history = load_price_history()
     with WATCHLIST_PATH.open("r", encoding="utf-8") as file:
         games = json.load(file)
     if not isinstance(games, list) or any(not isinstance(item, dict) for item in games):
@@ -245,6 +309,8 @@ def main():
                 print(f"WARNING: No usable price data for Steam App ID {app_id}")
                 continue
 
+            record_price_sample(price_history, state_key, game)
+
             if game["discount"] <= 0:
                 notification_state.pop(state_key, None)
                 print(f"No discount: {game['name']}")
@@ -275,6 +341,7 @@ def main():
 
     # Persist successes even if another game failed, preventing duplicate notifications next run.
     save_notification_state(notification_state)
+    save_price_history(price_history)
     if failures:
         print(f"ERROR: {len(failures)} game check(s) failed:")
         for failure in failures:
