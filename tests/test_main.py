@@ -14,9 +14,11 @@ class NotificationStateTests(unittest.TestCase):
         self.addCleanup(self.temp_dir.cleanup)
         root = Path(self.temp_dir.name)
         self.state_path = root / "notification_state.json"
+        self.history_path = root / "price_history.json"
         self.watchlist_path = root / "games_track_list.json"
         self.state_path.write_text("{}", encoding="utf-8")
         main.STATE_PATH = self.state_path
+        main.HISTORY_PATH = self.history_path
         main.WATCHLIST_PATH = self.watchlist_path
 
     def test_legacy_steam_state_key_is_migrated(self):
@@ -39,6 +41,42 @@ class NotificationStateTests(unittest.TestCase):
         state = {"steam:steam:TW:123": {"discount": 50, "final_price": 10.0}}
         main.save_notification_state(state)
         self.assertEqual(json.loads(self.state_path.read_text(encoding="utf-8")), state)
+
+    def test_price_history_records_one_sample_per_day_and_keeps_latest(self):
+        from datetime import datetime, timezone
+        history = {}
+        game = {
+            "currency": "TWD",
+            "final_price": 100,
+            "initial_price": 200,
+            "discount": 50,
+        }
+        first = datetime(2026, 1, 1, 1, tzinfo=timezone.utc)
+        later_same_day = datetime(2026, 1, 1, 8, tzinfo=timezone.utc)
+        main.record_price_sample(history, "steam:steam:TW:123", game, first)
+        game["final_price"] = 90
+        main.record_price_sample(history, "steam:steam:TW:123", game, later_same_day)
+        samples = history["steam:steam:TW:123"]
+        self.assertEqual(len(samples), 1)
+        self.assertEqual(samples[0]["final_price"], 90)
+        self.assertEqual(samples[0]["date_taiwan"], "2026-01-01")
+
+    def test_corrupt_price_history_fails_closed(self):
+        self.history_path.write_text("{broken", encoding="utf-8")
+        with self.assertRaises(RuntimeError):
+            main.load_price_history()
+
+    def test_price_history_save_round_trips_json(self):
+        history = {"steam:steam:TW:123": [{
+            "timestamp": "2026-01-01T00:00:00Z",
+            "date_taiwan": "2026-01-01",
+            "currency": "TWD",
+            "final_price": 90.0,
+            "initial_price": 200.0,
+            "discount": 55,
+        }]}
+        main.save_price_history(history)
+        self.assertEqual(json.loads(self.history_path.read_text(encoding="utf-8")), history)
 
     def test_successful_notification_state_survives_partial_failure(self):
         self.watchlist_path.write_text(json.dumps([
