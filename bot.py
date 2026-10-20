@@ -11,6 +11,7 @@ from discord import app_commands
 from dotenv import load_dotenv
 
 import nintendo
+import steam
 from nintendo_catalogue import NintendoCatalogueError, get_nintendo_game_by_id, search_nintendo_games
 
 load_dotenv()
@@ -61,56 +62,8 @@ def load_github_watchlist():
     return games
 
 def get_steam_current_price(product_id):
-    """Return current Taiwan Steam price details for a valid App ID."""
-    if not str(product_id).isdigit():
-        raise ValueError("Steam App ID must contain digits only")
-    response = requests.get(
-        "https://store.steampowered.com/api/appdetails/",
-        params={"appids": str(product_id), "l": "tchinese", "cc": "tw"},
-        timeout=15,
-    )
-    response.raise_for_status()
-    payload = response.json()
-    if not isinstance(payload, dict):
-        raise ValueError("Steam API response must be a JSON object")
-    result = payload.get(str(product_id), {})
-    if not isinstance(result, dict) or not result.get("success"):
-        return None
-    data = result.get("data", {})
-    if not isinstance(data, dict):
-        return None
-    price = data.get("price_overview")
-    if not isinstance(price, dict):
-        return {
-            "name": data.get("name", f"Steam App {product_id}"),
-            "price_available": False,
-            "url": f"https://store.steampowered.com/app/{product_id}/",
-        }
-    currency = price.get("currency")
-    if not isinstance(currency, str) or currency.strip().upper() != "TWD":
-        return {
-            "name": data.get("name", f"Steam App {product_id}"),
-            "price_available": False,
-            "url": f"https://store.steampowered.com/app/{product_id}/",
-        }
-    try:
-        final_minor = int(price["final"])
-        initial_minor = int(price["initial"])
-        discount = int(price.get("discount_percent", 0))
-    except (KeyError, TypeError, ValueError) as error:
-        raise ValueError("Steam API returned malformed price fields") from error
-    if final_minor < 0 or initial_minor < 0 or not 0 <= discount <= 100:
-        raise ValueError("Steam API returned out-of-range price fields")
-
-    return {
-        "name": data.get("name", f"Steam App {product_id}"),
-        "price_available": True,
-        "currency": currency.strip().upper(),
-        "final_price": final_minor / 100,
-        "initial_price": initial_minor / 100,
-        "discount": discount,
-        "url": f"https://store.steampowered.com/app/{product_id}/",
-    }
+    """Return current Taiwan Steam price details using the shared provider adapter."""
+    return steam.get_price(product_id, region="TW", language="tchinese")
 
 
 def update_github_watchlist(mutator, retries=5):
@@ -149,45 +102,13 @@ def update_github_watchlist(mutator, retries=5):
 
 
 def search_steam_games(query):
-    response = requests.get(
-        "https://store.steampowered.com/api/storesearch/",
-        params={"term": query, "l": "tchinese", "cc": "tw"},
-        timeout=15,
-    )
-    response.raise_for_status()
-    data = response.json()
-    if not isinstance(data, dict):
-        raise ValueError("Steam search response must be a JSON object")
-    items = data.get("items", [])
-    if not isinstance(items, list):
-        raise ValueError("Steam search response items must be a list")
-    results = []
-    for item in items[:25]:
-        if not isinstance(item, dict):
-            continue
-        product_id = str(item.get("id", ""))
-        name = item.get("name", "")
-        if product_id.isdigit() and name:
-            results.append({"product_id": product_id, "name": name})
-    return results
+    """Search the Taiwan Steam store through the shared provider adapter."""
+    return steam.search_games(query, region="TW", language="tchinese")
 
 
 def get_steam_game(product_id):
-    response = requests.get(
-        "https://store.steampowered.com/api/appdetails",
-        params={"appids": product_id, "l": "tchinese", "cc": "tw"},
-        timeout=15,
-    )
-    response.raise_for_status()
-    payload = response.json()
-    if not isinstance(payload, dict):
-        raise ValueError("Steam API response must be a JSON object")
-    result = payload.get(str(product_id), {})
-    if not isinstance(result, dict) or not result.get("success"):
-        return None
-    data = result.get("data", {})
-    name = data.get("name") if isinstance(data, dict) else None
-    return name if isinstance(name, str) and name.strip() else None
+    """Return the Steam product name for a valid Taiwan-store App ID."""
+    return steam.get_game_name(product_id, region="TW", language="tchinese")
 
 
 def platform_of(game):
