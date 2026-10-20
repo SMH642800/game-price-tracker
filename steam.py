@@ -104,7 +104,7 @@ def get_price(
     if isinstance(expiration, bool) or not isinstance(expiration, int) or expiration <= 0:
         expiration = (
             expiration_resolver(product_id, region)
-            if expiration_resolver is not None else None
+            if discount > 0 and expiration_resolver is not None else None
         )
 
     return {
