@@ -25,7 +25,10 @@ class NintendoSourceProbeTests(unittest.TestCase):
         first.raise_for_status.return_value = None
         first.json.return_value = {
             "total": 25,
-            "items": [{"title": "Game A", "nsuid": "70010000000001"}],
+            "items": [
+                {"title": "Game A", "nsuid": "70010000000001"},
+                *[{"title": f"Filler {index}", "nsuid": str(70010000001000 + index)} for index in range(23)],
+            ],
         }
         second_response = Mock()
         second_response.raise_for_status.return_value = None
@@ -37,7 +40,9 @@ class NintendoSourceProbeTests(unittest.TestCase):
 
         rows, summary = probe.load_catalogue(session, cache_path=None)
 
-        self.assertEqual([row["title"] for row in rows], ["Game A", "Game B"])
+        self.assertEqual(len(rows), 25)
+        self.assertEqual(rows[0]["title"], "Game A")
+        self.assertEqual(rows[-1]["title"], "Game B")
         self.assertEqual(summary["pages_requested"], 2)
         self.assertEqual(session.get.call_count, 2)
         self.assertEqual(session.get.call_args_list[0].kwargs["params"]["spage"], 1)
