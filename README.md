@@ -4,9 +4,9 @@ A Discord-managed game price tracker. The scheduled GitHub Actions workflow curr
 
 ## Current capabilities
 
-- Discord slash commands: `/add`, `/remove`, `/list`, `/price`, `/help`, `/ping`, and `/admincheck`.
-- `/add` and `/remove` ask for a platform first. Steam has live search and price checking; PS5, Nintendo Switch (NS), and Nintendo Switch 2 use title-based lookup and watchlist tracking.
-- `/lookup platform game` returns live Steam prices for Steam, and store plus web price-search links for PS5/NS/NS2. Console links are references, not verified numeric prices.
+- Discord slash commands: `/add`, `/remove`, `/list`, `/lookup`, `/help`, `/ping`, and `/admincheck`.
+- `/add` and `/remove` ask for a platform first. Steam uses live search; NS and NS2 use real Nintendo catalogue matches and stable NSUIDs for digital editions. PS5 remains link-only.
+- `/lookup platform game` is the single price-lookup entry point: Steam returns current Taiwan pricing; NS/NS2 look up the Taiwan digital price for the selected catalogue item; PS5 returns store and price-search links.
 - Notification state is stored in `notification_state.json`; corrupted JSON stops the run rather than silently resetting notification state.
 - `/price` fetches the current Taiwan Steam price.
 - Partial price-check failures produce a failed workflow status while successfully sent notification state is still saved.
@@ -67,7 +67,7 @@ A manual, low-rate probe for Nintendo Taiwan's candidate catalogue and digital-p
 python scripts/probe_nintendo_sources.py
 ```
 
-It searches the catalogue for 時之笛 and 亰都幻都 / Kyoto Xanadu, then requests price data only for matching NSUIDs. To avoid downloading all pages on every development run, it stores a local 24-hour catalogue cache at `.cache/nintendo_tw_catalogue.json` (ignored by Git). Use `--refresh-cache` to fetch the catalogue again or `--no-cache` to disable caching. The output includes cache status, duplicate NSUID counts, and elapsed-time diagnostics. It does not run in CI or enable numeric prices in Discord. The endpoints are undocumented and automated reuse permissions have not been confirmed; a successful probe is technical evidence only, not approval to enable production automation. See `docs/console-data-source-audit.md` for the current source gates.
+It searches the catalogue for 時之笛 and 亰都幻都 / Kyoto Xanadu, then requests price data only for matching NSUIDs. To avoid downloading all pages on every development run, it stores a local 24-hour catalogue cache at `.cache/nintendo_tw_catalogue.json` (ignored by Git). Use `--refresh-cache` to fetch the catalogue again or `--no-cache` to disable caching. The output includes cache status, duplicate NSUID counts, and elapsed-time diagnostics. It does not run in CI. The Discord Nintendo lookup now reads this local cache to provide real catalogue autocomplete; if the cache is missing or older than 24 hours, autocomplete fails closed and asks you to refresh it. The endpoints are undocumented and automated reuse permissions have not been confirmed; numeric responses are labelled as coming from an undocumented interface. See `docs/console-data-source-audit.md` for the current source gates.
 
 ## Local checks
 
