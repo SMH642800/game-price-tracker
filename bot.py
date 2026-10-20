@@ -304,7 +304,7 @@ async def list_games(interaction: discord.Interaction):
             lines.append(f"🕹️ **{platform_name}（{len(platform_games)} 款）**")
             for item in platform_games:
                 product_id = product_id_of(item)
-                name = str(item.get("name", "未知遊戲")).replace("\\n", " ").strip()
+                name = str(item.get("name", "未知遊戲")).replace("\n", " ").strip()
                 region = str(item.get("region", "TW"))
                 lines.append(f"• **{name[:120]}** — ID: `{product_id or '未知'}`（{region}）")
 
@@ -383,9 +383,9 @@ async def add_game(interaction: discord.Interaction, platform: str, game: str):
 
             added = await asyncio.to_thread(update_github_watchlist, add_nintendo_mutation)
             status = "已新增到追蹤清單" if added else "已在追蹤清單中"
-            verification_note = "" if entry["platform_verified"] else "\\n⚠️ Nintendo 目錄未標註平台世代，請先確認商品是否屬於所選平台。"
+            verification_note = "" if entry["platform_verified"] else "\n⚠️ Nintendo 目錄未標註平台世代，請先確認商品是否屬於所選平台。"
             await interaction.followup.send(
-                f"✅ {entry['name']}（{SUPPORTED_PLATFORMS[platform]}／台灣數位版，NSUID：{product_id}）{status}。\\n"
+                f"✅ {entry['name']}（{SUPPORTED_PLATFORMS[platform]}／台灣數位版，NSUID：{product_id}）{status}。\n"
                 "實體版價格不包含在內；Nintendo 數位價格介面尚未公開文件化。"
                 f"{verification_note}",
                 ephemeral=True,
@@ -413,9 +413,9 @@ async def add_game(interaction: discord.Interaction, platform: str, game: str):
             added = await asyncio.to_thread(update_github_watchlist, add_link_only_mutation)
             status = "已新增" if added else "已在追蹤清單中"
             await interaction.followup.send(
-                f"✅ {name}（{SUPPORTED_PLATFORMS[platform]}／台灣區）{status}。\\n"
-                "目前只提供商店與網路價格搜尋連結，不會顯示未驗證的即時價格數字。\\n"
-                f"商店查詢：{links['store']}\\n價格搜尋參考：{links['price_search']}",
+                f"✅ {name}（{SUPPORTED_PLATFORMS[platform]}／台灣區）{status}。\n"
+                "目前只提供商店與網路價格搜尋連結，不會顯示未驗證的即時價格數字。\n"
+                f"商店查詢：{links['store']}\n價格搜尋參考：{links['price_search']}",
                 ephemeral=True,
             )
         except (requests.RequestException, ValueError, KeyError, TypeError, RuntimeError) as error:
@@ -578,7 +578,7 @@ async def handle_nintendo_price_query(interaction: discord.Interaction, platform
                 "注意：這是數位版價格，不代表實體卡帶／零售商價格。"
             )
         if not entry["platform_verified"]:
-            message += "\\n⚠️ Nintendo 目錄未標註平台世代；價格紀錄對應此 NSUID，但請先確認商品版本。"
+            message += "\n⚠️ Nintendo 目錄未標註平台世代；價格紀錄對應此 NSUID，但請先確認商品版本。"
         await interaction.followup.send(message, ephemeral=True)
     except (requests.RequestException, NintendoCatalogueError, nintendo.NintendoPriceError,
             ValueError, KeyError, TypeError, AttributeError, RuntimeError) as error:
