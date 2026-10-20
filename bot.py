@@ -60,8 +60,9 @@ def update_github_watchlist(mutator, retries=5):
     last_error = None
     for attempt in range(retries):
         games, sha = fetch_github_watchlist_with_sha()
+        original_games = list(games)
         updated_games, result = mutator(games)
-        if updated_games == games:
+        if updated_games == original_games:
             return result
 
         content = json.dumps(updated_games, ensure_ascii=False, indent=2) + "\n"
