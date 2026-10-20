@@ -449,11 +449,9 @@ async def tracked_game_autocomplete(interaction, current):
         return []
 
 
-@tree.command(name="price", description="查詢 Steam 台灣商店目前價格")
-@app_commands.describe(game="輸入遊戲名稱，並從 Steam 搜尋結果中選擇")
-@app_commands.autocomplete(game=platform_autocomplete)
-async def price_command(interaction: discord.Interaction, game: str):
-    product_id = game.strip()
+async def handle_steam_price_query(interaction: discord.Interaction, product_id: str):
+    """Shared Steam price lookup flow for slash commands."""
+    product_id = product_id.strip()
     if not product_id.isdigit():
         await interaction.response.send_message("❌ 請從 Steam 搜尋結果中選擇遊戲。", ephemeral=True)
         return
@@ -483,6 +481,13 @@ async def price_command(interaction: discord.Interaction, game: str):
         await interaction.followup.send("❌ 查價服務暫時無法使用，請稍後再試。", ephemeral=True)
 
 
+@tree.command(name="price", description="查詢 Steam 台灣商店目前價格")
+@app_commands.describe(game="輸入遊戲名稱，並從 Steam 搜尋結果中選擇")
+@app_commands.autocomplete(game=platform_autocomplete)
+async def price_command(interaction: discord.Interaction, game: str):
+    await handle_steam_price_query(interaction, game)
+
+
 @tree.command(name="lookup", description="查詢平台商店與價格參考連結")
 @app_commands.describe(platform="選擇遊戲平台", game="輸入遊戲名稱；Steam 可從搜尋結果選擇")
 @app_commands.choices(platform=PLATFORM_CHOICES)
@@ -494,7 +499,7 @@ async def lookup_command(interaction: discord.Interaction, platform: str, game: 
         await interaction.response.send_message("❌ 請輸入遊戲名稱。", ephemeral=True)
         return
     if platform == "steam":
-        await price_command(interaction, query)
+        await handle_steam_price_query(interaction, query)
         return
     links = platform_store_links(platform, query)
     await interaction.response.send_message(
