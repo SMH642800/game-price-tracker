@@ -70,20 +70,13 @@ def inferred_platform(row: dict[str, Any]) -> str:
 
 
 def platform_matches(row: dict[str, Any], platform: str) -> bool:
-    value = row.get("platform")
-    title = normalize(title_of(row))
-    # Unified Nintendo searches both generations. Missing metadata remains searchable
-    # but is labelled unverified rather than assigned to a generation by guesswork.
-    if platform == "nintendo":
-        return True
-    if not isinstance(value, str) or not value.strip():
-        return not (platform == "ns" and inferred_platform(row) == "ns2")
-    actual = inferred_platform(row)
-    if platform == "ns2":
-        return actual == "ns2"
-    if platform == "ns":
-        return actual == "ns"
-    return False
+    """Treat NS, NS2 and the unified Nintendo selector as one searchable library.
+
+    The platform argument remains accepted for existing callers and saved watchlists.
+    Edition wording stays in the title, but platform metadata does not hide a result:
+    an NS2 console can play compatible NS games, and price lookup is keyed by NSUID.
+    """
+    return platform in {"nintendo", "ns", "ns2"}
 
 
 def load_cached_catalogue(*, now: float | None = None) -> list[dict[str, Any]]:
@@ -138,7 +131,7 @@ def search_nintendo_games(
         matches.append({
             "product_id": nsuid,
             "name": title,
-            "platform": inferred_platform(row),
+            "platform": "nintendo",
             "platform_verified": isinstance(row.get("platform"), str) and bool(row.get("platform", "").strip()),
         })
         if len(matches) >= max(1, min(limit, 25)):
@@ -162,7 +155,7 @@ def get_nintendo_game_by_id(
             return {
                 "product_id": product_id,
                 "name": title_of(row),
-                "platform": inferred_platform(row),
+                "platform": "nintendo",
                 "platform_verified": isinstance(row.get("platform"), str) and bool(row.get("platform", "").strip()),
             }
     return None
