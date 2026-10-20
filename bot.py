@@ -386,16 +386,16 @@ async def price_command(interaction: discord.Interaction, game: str):
             return
         if not result["price_available"]:
             message = (
-                f"🎮 **{result['name']}**\\n"
-                "台灣商店目前沒有可用的價格資料（可能是免費遊戲、尚未發售或地區限制）。\\n"
+                f"🎮 **{result['name']}**\n"
+                "台灣商店目前沒有可用的價格資料（可能是免費遊戲、尚未發售或地區限制）。\n"
                 f"{result['url']}"
             )
         else:
             message = (
-                f"🎮 **{result['name']}**\\n"
-                f"目前價格：**{result['currency']} {result['final_price']:.2f}**\\n"
-                f"原價：{result['currency']} {result['initial_price']:.2f}\\n"
-                f"折扣：**{result['discount']}%**\\n"
+                f"🎮 **{result['name']}**\n"
+                f"目前價格：**{result['currency']} {result['final_price']:.2f}**\n"
+                f"原價：{result['currency']} {result['initial_price']:.2f}\n"
+                f"折扣：**{result['discount']}%**\n"
                 f"{result['url']}"
             )
         await interaction.followup.send(message, ephemeral=True)
@@ -429,7 +429,7 @@ async def history_command(interaction: discord.Interaction, game: str):
         samples = history.get(key, []) if isinstance(history, dict) else []
         if not samples:
             await interaction.followup.send(
-                f"📉 **{config.get('name', '未知遊戲')}** 尚無歷史價格紀錄。\\n"
+                f"📉 **{config.get('name', '未知遊戲')}** 尚無歷史價格紀錄。\n"
                 "紀錄會從下一次成功的自動查價開始累積，不會自動補出過去價格。",
                 ephemeral=True,
             )
@@ -456,7 +456,7 @@ async def history_command(interaction: discord.Interaction, game: str):
                 f"（折扣 {sample.get('discount', 0)}%）"
             )
         lines.append(f"https://store.steampowered.com/app/{product_id}/")
-        await interaction.followup.send("\\n".join(lines), ephemeral=True)
+        await interaction.followup.send("\n".join(lines), ephemeral=True)
     except (requests.RequestException, ValueError, KeyError, TypeError, RuntimeError) as error:
         print(f"Price history query failed for {product_id}: {type(error).__name__}: {error}")
         await interaction.followup.send("❌ 無法讀取價格歷史，請稍後再試。", ephemeral=True)
