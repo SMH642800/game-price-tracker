@@ -86,7 +86,7 @@ class NotificationStateTests(unittest.TestCase):
             "region": "TW", "name": "Example Game",
         }])
         state = {"steam:steam:TW:123": {"discount": 50, "final_price": 10.0}}
-        self.state_path.write_text(json.dumps(state), encoding="utf-8)
+        self.state_path.write_text(json.dumps(state), encoding="utf-8")
         with patch.object(main, "get_steam_price", return_value=self.discounted_game()), \
              patch.object(main, "send_discord_message") as send:
             main.main()
