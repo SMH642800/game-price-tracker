@@ -141,6 +141,32 @@ class NintendoScheduledNotificationTests(unittest.TestCase):
         send.assert_not_called()
         self.assertEqual(json.loads(self.state_path.read_text(encoding="utf-8")), state)
 
+    def test_unknown_sales_status_fails_closed_and_preserves_previous_state(self):
+        config = self.config()
+        self.write_watchlist([config])
+        state_key = "nintendo:nintendo_eshop:TW:70010000012345"
+        state = {state_key: {"discount": 28, "final_price": 1290.0}}
+        self.state_path.write_text(json.dumps(state), encoding="utf-8")
+        unknown_status = {
+            "name": config["name"],
+            "available": False,
+            "sales_status": "unknown",
+            "currency": "TWD",
+            "regular_price": None,
+            "current_price": None,
+            "discount": 0,
+            "url": "https://ec.nintendo.com/TW/zh/titles/70010000012345",
+        }
+
+        with patch.object(main, "get_nintendo_price", return_value=unknown_status), \\
+             patch.object(main, "send_discord_message") as send:
+            with self.assertRaises(SystemExit) as exc:
+                main.main()
+
+        self.assertEqual(exc.exception.code, 1)
+        send.assert_not_called()
+        self.assertEqual(json.loads(self.state_path.read_text(encoding="utf-8")), state)
+
     def test_missing_price_record_fails_and_preserves_previous_state(self):
         config = self.config()
         self.write_watchlist([config])
