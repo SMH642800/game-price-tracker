@@ -31,25 +31,40 @@ def get_steam_price(app_id, region="TW"):
     )
     response.raise_for_status()
 
-    payload = response.json().get(str(app_id), {})
+    response_payload = response.json()
+    if not isinstance(response_payload, dict):
+        raise ValueError("Steam API response must be a JSON object")
+    payload = response_payload.get(str(app_id), {})
 
-    if not payload.get("success"):
+    if not isinstance(payload, dict) or not payload.get("success"):
         print(f"Steam API returned no usable data: {app_id}")
         return None
 
-    game = payload["data"]
+    game = payload.get("data")
+    if not isinstance(game, dict):
+        print(f"Steam API returned malformed game data: {app_id}")
+        return None
     price = game.get("price_overview")
 
-    if not price:
+    if not isinstance(price, dict):
         print(f"No price available: {game.get('name', app_id)}")
         return None
 
+    try:
+        final_minor = int(price["final"])
+        initial_minor = int(price["initial"])
+        discount = int(price.get("discount_percent", 0))
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError(f"Steam API returned malformed price fields for {app_id}") from error
+    if final_minor < 0 or initial_minor < 0 or not 0 <= discount <= 100:
+        raise ValueError(f"Steam API returned out-of-range price fields for {app_id}")
+
     return {
         "name": game.get("name", f"Steam App {app_id}"),
-        "currency": price.get("currency", ""),
-        "final_price": price["final"] / 100,
-        "initial_price": price["initial"] / 100,
-        "discount": price.get("discount_percent", 0),
+        "currency": price.get("currency") or "",
+        "final_price": final_minor / 100,
+        "initial_price": initial_minor / 100,
+        "discount": discount,
         "discount_expiration": (
             price.get("discount_expiration")
             or get_steam_discount_expiration(app_id, region)
