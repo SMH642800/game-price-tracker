@@ -74,13 +74,15 @@ A manual, low-rate probe for Nintendo Taiwan's candidate catalogue and digital-p
 python scripts/probe_nintendo_sources.py
 ```
 
-The probe searches the catalogue for selected titles and requests price data only for matching NSUIDs. It stores a local 24-hour catalogue cache at `.cache/nintendo_tw_catalogue.json` (ignored by Git). Use `--refresh-cache` to fetch the catalogue again or `--no-cache` to disable caching. The Discord Nintendo lookup reads this local cache; if it is missing or expired, autocomplete fails closed and asks you to refresh it:
+The probe searches the catalogue for selected titles and requests price data only for matching NSUIDs. It stores a catalogue cache at `.cache/nintendo_tw_catalogue.json`; the optional Hong Kong cache is `.cache/nintendo_hk_catalogue.json`. The cache is valid for eight days. Use `--refresh-cache` to fetch the selected catalogue again or `--no-cache` to disable caching. In the GitHub Actions environment, the weekly workflow commits both validated cache files so the Discord bot can read them. If a cache is missing or expired, autocomplete fails closed and asks you to refresh it:
 
 ```bash
 python scripts/probe_nintendo_sources.py --refresh-cache
 ```
 
-The probe does not run in CI. A successful response proves only that the endpoint responded at that time; it does not establish permission for automated reuse. See [the Nintendo source audit](docs/console-data-source-audit.md).
+The weekly GitHub Actions workflow `.github/workflows/refresh-nintendo-catalogues.yml` refreshes both Taiwan and Hong Kong catalogues every Sunday (20:23 Taiwan time), and can also be run manually. It uses catalogue-only mode, so it does not query prices; both catalogues must download and pass validation before either cache update is committed. The cache files are committed under `.cache/` despite the directory being ignored for local development, making them available to the bot's checkout. Cache entries remain usable for up to eight days, giving a one-day buffer if the weekly refresh is delayed. If refresh fails, the previous committed caches remain in place and the workflow reports failure (and attempts a Discord alert when the webhook secret is configured).
+
+A successful response proves only that the endpoint responded at that time; it does not establish permission for automated reuse. See [the Nintendo source audit](docs/console-data-source-audit.md).
 
 ## Local checks
 
