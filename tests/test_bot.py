@@ -169,7 +169,7 @@ class NintendoCommandTests(unittest.IsolatedAsyncioTestCase):
         interaction = AsyncMock()
         interaction.namespace.platform = "ns"
         with patch.object(bot, "search_nintendo_games", return_value=[
-            {"name": "薩爾達傳說 時之笛", "product_id": "70010000012345", "platform": "ns"}
+            {"name": "薩爾達傳說 時之笛", "product_id": "70010000012345", "platform": "ns", "platform_verified": True}
         ]) as search:
             choices = await bot.platform_autocomplete(interaction, "時之笛")
         search.assert_called_once_with("時之笛", "ns")
