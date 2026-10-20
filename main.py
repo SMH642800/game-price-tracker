@@ -50,6 +50,9 @@ def get_steam_price(app_id, region="TW"):
         print(f"No price available: {game.get('name', app_id)}")
         return None
 
+    currency = price.get("currency")
+    if not isinstance(currency, str) or not currency.strip():
+        raise ValueError(f"Steam API returned no currency for {app_id}")
     try:
         final_minor = int(price["final"])
         initial_minor = int(price["initial"])
@@ -61,7 +64,7 @@ def get_steam_price(app_id, region="TW"):
 
     return {
         "name": game.get("name", f"Steam App {app_id}"),
-        "currency": price.get("currency") or "",
+        "currency": currency.strip().upper(),
         "final_price": final_minor / 100,
         "initial_price": initial_minor / 100,
         "discount": discount,
