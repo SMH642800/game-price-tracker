@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import time
 import unicodedata
-from urllib.parse import urlencode
 
 import requests
 
