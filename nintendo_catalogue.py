@@ -136,7 +136,12 @@ def load_optional_hk_catalogue(*, now: float | None = None) -> list[dict[str, An
 
 
 def search_nintendo_games(
-    query: str, platform: str, *, rows: list[dict[str, Any]] | None = None, limit: int = 25
+    query: str,
+    platform: str,
+    *,
+    rows: list[dict[str, Any]] | None = None,
+    hk_rows: list[dict[str, Any]] | None = None,
+    limit: int = 25,
 ) -> list[dict[str, Any]]:
     """Return real catalogue entries with stable NSUIDs, deduplicated by ID."""
     if platform not in {"ns", "ns2", "nintendo"}:
@@ -144,11 +149,18 @@ def search_nintendo_games(
     needle = normalize(query)
     if not needle:
         return []
-    catalogue = [
+    # TW remains the primary source. HK only supplements missing NSUIDs and is
+    # deliberately optional, so an absent/expired HK cache cannot break TW search.
+    tw_catalogue = [
         *MANUAL_CATALOGUE_ENTRIES,
         *(load_cached_catalogue() if rows is None else rows),
-        *(load_optional_hk_catalogue() if rows is None else []),
     ]
+    supplemental_hk = (
+        load_optional_hk_catalogue()
+        if hk_rows is None and rows is None
+        else (hk_rows or [])
+    )
+    catalogue = [*tw_catalogue, *supplemental_hk]
     matches: list[dict[str, str]] = []
     seen_ids: set[str] = set()
     for row in catalogue:
@@ -171,13 +183,39 @@ def search_nintendo_games(
 
 
 def get_nintendo_game_by_id(
-    product_id: str, platform: str, *, rows: list[dict[str, Any]] | None = None
+    product_id: str,
+    platform: str,
+    *,
+    rows: list[dict[str, Any]] | None = None,
+    hk_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
     product_id = str(product_id).strip()
     if not product_id.isdigit():
         return None
-    catalogue = [*MANUAL_CATALOGUE_ENTRIES, *(load_cached_catalogue() if rows is None else rows)]
-    for row in catalogue:
+    tw_catalogue = [
+        *MANUAL_CATALOGUE_ENTRIES,
+        *(load_cached_catalogue() if rows is None else rows),
+    ]
+    # Prefer TW/curated metadata for an ID. Only consult HK if TW has no match.
+    for row in tw_catalogue:
+        if (
+            str(row.get("nsuid", "")).strip() == product_id
+            and platform_matches(row, platform)
+            and title_of(row)
+        ):
+            return {
+                "product_id": product_id,
+                "name": title_of(row),
+                "platform": "nintendo",
+                "platform_verified": isinstance(row.get("platform"), str) and bool(row.get("platform", "").strip()),
+            }
+
+    supplemental_hk = (
+        load_optional_hk_catalogue()
+        if hk_rows is None and rows is None
+        else (hk_rows or [])
+    )
+    for row in supplemental_hk:
         if (
             str(row.get("nsuid", "")).strip() == product_id
             and platform_matches(row, platform)
