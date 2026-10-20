@@ -55,6 +55,7 @@ class NintendoDigitalPriceTests(unittest.TestCase):
         )
         self.assertTrue(result["available"])
         self.assertIsNone(result["currency"])
+        self.assertIsNone(result["regular_price"])
         self.assertIsNone(result["current_price"])
 
     def test_currency_must_match_requested_region(self):
@@ -67,6 +68,7 @@ class NintendoDigitalPriceTests(unittest.TestCase):
             "70010000012345", country="TW", session=session
         )
         self.assertEqual(result["currency"], "JPY")
+        self.assertIsNone(result["discount_price"])
         self.assertIsNone(result["current_price"])
 
     def test_invalid_negative_or_non_finite_amounts_are_not_used(self):
