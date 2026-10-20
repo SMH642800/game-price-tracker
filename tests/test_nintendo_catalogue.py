@@ -163,6 +163,9 @@ class NintendoCatalogueSearchTests(unittest.TestCase):
                 )
         self.assertIsNone(catalogue.get_nintendo_game_by_id("title", "ns2", rows=rows))
 
+    def test_catalogue_cache_lifetime_covers_weekly_refresh_interval(self):
+        self.assertEqual(catalogue.CACHE_TTL_SECONDS, 8 * 24 * 60 * 60)
+
     def test_expired_cache_fails_closed(self):
         with tempfile.TemporaryDirectory() as temp:
             cache_path = Path(temp) / "cache.json"
