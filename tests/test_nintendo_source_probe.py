@@ -117,6 +117,16 @@ class NintendoSourceProbeTests(unittest.TestCase):
             self.assertFalse(cache_path.exists())
             self.assertFalse(summary["cache_hit"])
 
+    def test_catalogue_page_safety_cap_still_rejects_extreme_page_count(self):
+        session = Mock()
+        session.get.return_value = self.make_response({
+            "total": probe.PAGE_SIZE * (probe.MAX_PAGES + 1),
+            "items": [],
+        })
+        with self.assertRaisesRegex(ValueError, "safety cap is 500"):
+            probe.load_catalogue(session, cache_path=None)
+        session.get.assert_called_once()
+
     def test_malformed_page_schema_fails_closed(self):
         session = Mock()
         session.get.side_effect = [
