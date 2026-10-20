@@ -43,6 +43,58 @@ class NintendoDigitalPriceTests(unittest.TestCase):
             "country": "TW", "lang": "zh", "ids": "70010000012345",
         })
 
+
+    def test_missing_currency_does_not_infer_twd_from_region(self):
+        session = self.make_session({"prices": [{
+            "title_id": "70010000012345",
+            "sales_status": "onsale",
+            "regular_price": {"raw_value": 1290},
+        }]})
+        result = nintendo.get_nintendo_digital_price(
+            "70010000012345", country="TW", session=session
+        )
+        self.assertTrue(result["available"])
+        self.assertIsNone(result["currency"])
+        self.assertIsNone(result["current_price"])
+
+    def test_currency_must_match_requested_region(self):
+        session = self.make_session({"prices": [{
+            "title_id": "70010000012345",
+            "sales_status": "onsale",
+            "regular_price": {"currency": "JPY", "raw_value": 1290},
+        }]})
+        result = nintendo.get_nintendo_digital_price(
+            "70010000012345", country="TW", session=session
+        )
+        self.assertEqual(result["currency"], "JPY")
+        self.assertIsNone(result["current_price"])
+
+    def test_invalid_negative_or_non_finite_amounts_are_not_used(self):
+        for raw_value in (-1, float("inf"), float("nan"), True):
+            with self.subTest(raw_value=raw_value):
+                session = self.make_session({"prices": [{
+                    "title_id": "70010000012345",
+                    "sales_status": "onsale",
+                    "regular_price": {"currency": "TWD", "raw_value": raw_value},
+                }]})
+                result = nintendo.get_nintendo_digital_price(
+                    "70010000012345", country="TW", session=session
+                )
+                self.assertIsNone(result["regular_price"])
+                self.assertIsNone(result["current_price"])
+
+    def test_conflicting_regular_and_discount_currencies_fail_closed(self):
+        session = self.make_session({"prices": [{
+            "title_id": "70010000012345",
+            "sales_status": "onsale",
+            "regular_price": {"currency": "TWD", "raw_value": 1790},
+            "discount_price": {"currency": "JPY", "raw_value": 1290},
+        }]})
+        result = nintendo.get_nintendo_digital_price(
+            "70010000012345", country="TW", session=session
+        )
+        self.assertIsNone(result["current_price"])
+
     def test_does_not_match_a_different_title_id(self):
         session = self.make_session({"prices": [{
             "title_id": "70010000099999",
