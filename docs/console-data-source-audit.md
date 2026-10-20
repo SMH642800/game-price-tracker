@@ -100,3 +100,25 @@ User supplied an example game page at [eShop-Prices](https://eshop-prices.com/ga
 ### Current verification status
 
 The available tools in this work session can inspect public GitHub content but cannot directly run reproducible requests against Nintendo or eShop-Prices, nor inspect those sites' current legal/robots pages. Accordingly, the Nintendo endpoint is a **promising but unapproved technical lead**; eShop-Prices is a **human-reference lead only**. Numeric Nintendo prices and catalogue-backed autocomplete remain gated until a live smoke test and permitted-use review are documented.
+
+## Adapter implementation progress (2026-10-20)
+
+A first isolated adapter has been added at `nintendo.py`, with mocked unit tests in `tests/test_nintendo.py`. It:
+- validates numeric title IDs and only allows TW/JP regions;
+- requests the candidate endpoint with `country`, `lang`, and `ids`;
+- matches the response by exact `title_id` (never by title text);
+- separates regular, discount, and current price; preserves region/currency/status/source timestamp;
+- distinguishes an explicit non-sale status from an absent record and never silently retries another region;
+- fails closed on HTTP errors, invalid JSON, and unexpected schema.
+
+This is a **tested-by-design adapter scaffold, not yet a production-enabled integration**. The source remains undocumented and no live API smoke test or terms review has been completed in this environment. The current Discord command still does not call this adapter.
+
+### Remaining release blockers
+
+1. **Catalogue/autocomplete:** no approved, sufficiently broad Nintendo Switch 2 title-search source has been verified. The price endpoint cannot search titles. Do not reuse third-party Algolia credentials. eShop-Prices remains a human-facing reference until its API and reuse terms are confirmed.
+2. **Taiwan-to-Japan fallback:** only implement automatic fallback after the API's regional availability signals are live-tested and shown to distinguish "not sold in Taiwan" from missing ID, API outage, or schema change.
+3. **Physical edition price:** no permitted, verified retailer price feed is selected. Until then, the UI must explicitly say physical price is unavailable and link to a search; never reuse digital price.
+4. **Discord integration:** once the catalogue is approved, autocomplete choice values should be stable title IDs; the display label must include enough title/platform/edition detail to distinguish duplicate editions. Then wire `/lookup` and `/add` to the chosen result and the price adapter.
+5. **Validation:** run `python -m unittest discover -s tests -v` and confirm PR CI on the updated head; separately perform a documented manual live smoke test for Taiwan, Japan, sale, non-sale, missing record, and Switch 2 title IDs.
+
+Until blockers 1–3 are resolved, console numeric prices remain disabled and this PR must remain Draft.
