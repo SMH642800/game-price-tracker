@@ -173,7 +173,7 @@ class NotificationStateTests(unittest.TestCase):
         }])
         self.state_path.write_text(json.dumps({
             "steam:steam:TW:gone": {"discount": 10, "final_price": 1},
-            "steam:steam:JP:123": {"discount": 10, "final_price": 1},
+            "steam:steam:JP:123": {"discount": 50, "final_price": 10.0},
         }), encoding="utf-8")
         with patch.object(main, "get_steam_price", return_value=self.discounted_game(discount=0)), \
              patch.object(main, "send_discord_message"):
