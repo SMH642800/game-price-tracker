@@ -63,6 +63,25 @@ class NintendoSourceProbeTests(unittest.TestCase):
             self.assertTrue(cached_summary["cache_hit"])
             self.assertEqual(cached_summary["rows_received"], 3)
 
+    def test_hk_catalogue_probe_uses_hk_catalogue_url_but_keeps_taiwan_price_region(self):
+        session = Mock()
+        response = self.make_response({
+            "total": 0,
+            "items": [],
+        })
+        session.get.return_value = response
+        with tempfile.TemporaryDirectory() as directory:
+            cache_path = Path(directory) / "hk.json"
+            rows, summary = probe.load_catalogue(
+                session,
+                cache_path=cache_path,
+                refresh_cache=True,
+                catalogue_url=probe.CATALOG_URLS["HK"],
+            )
+        self.assertEqual(rows, [])
+        self.assertEqual(session.get.call_args.args[0], "https://www.nintendo.com/hk/api/software")
+        self.assertEqual(probe.get_prices(Mock(), []), {"requested_ids": [], "prices": []})
+
     def test_refresh_cache_bypasses_existing_cache(self):
         with tempfile.TemporaryDirectory() as directory:
             cache_path = Path(directory) / "catalogue.json"
