@@ -5,8 +5,8 @@ A Discord-managed game price tracker. The scheduled GitHub Actions workflow curr
 ## Current capabilities
 
 - Discord slash commands: `/add`, `/remove`, `/list`, `/lookup`, `/help`, `/ping`, and `/admincheck`.
-- `/add` and `/remove` ask for a platform first. Steam uses live search; NS and NS2 use real Nintendo catalogue matches and stable NSUIDs for digital editions. PS5 remains link-only.
-- `/lookup platform game` is the single price-lookup entry point: Steam returns current Taiwan pricing; NS/NS2 look up the Taiwan digital price for the selected catalogue item; PS5 returns store and price-search links.
+- `/add` and `/remove` ask for a platform first. Steam uses live search; NS and NS2 use real Nintendo catalogue matches and stable NSUIDs for digital editions. PS5 is not available for automated search or lookup; existing manually maintained PS5 watchlist rows remain visible and removable.
+- `/lookup platform game` is the single price-lookup entry point: Steam returns current Taiwan pricing; NS/NS2 look up the Taiwan digital price for the selected catalogue item.
 - Notification state is stored in `notification_state.json`; corrupted JSON stops the run rather than silently resetting notification state.
 - `/price` fetches the current Taiwan Steam price.
 - Partial price-check failures produce a failed workflow status while successfully sent notification state is still saved.
@@ -16,7 +16,7 @@ The product scope is current-price lookup and discount notifications only. Histo
 
 ## Platform and deployment direction
 
-The roadmap covers **Steam, PS5, Nintendo Switch (NS), and Nintendo Switch 2 (NS2)**. NS and NS2 must be represented separately; the same game title can map to distinct platform products, editions, upgrade paths, and prices. Do not merge NS, NS2, and NS2 Edition prices based on title text alone.
+Current bot lookup supports **Steam, Nintendo Switch (NS), and Nintendo Switch 2 (NS2)**. PS5 lookup is intentionally out of scope; a manually maintained PS5 row can remain in the watchlist for reference. NS and NS2 must be represented separately; the same game title can map to distinct platform products, editions, upgrade paths, and prices. Do not merge NS, NS2, and NS2 Edition prices based on title text alone.
 
 The system is also intended to run independently of a personal computer. See [the platform and cloud deployment roadmap](docs/platform-and-deployment-roadmap.md) for architecture constraints and staged deployment guidance. These are design requirements, not claims that all platforms or cloud hosting are already implemented.
 
