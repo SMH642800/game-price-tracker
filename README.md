@@ -55,6 +55,9 @@ Discord bot environment variables:
 - `DISCORD_ADMIN_ID`
 - `DISCORD_GUILD_ID`
 - `GITHUB_TOKEN` (repository contents read/write access)
+- `GITHUB_BRANCH` (branch used for the watchlist; defaults to `main`)
+
+For local development, set `GITHUB_BRANCH=feature/stability-price-history-commands` in your local `.env` so bot commands read/write the development branch instead of changing the `main` watchlist. Use `main` only when you intentionally want the bot to manage the main-branch watchlist.
 
 GitHub Actions repository secrets:
 
