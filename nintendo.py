@@ -118,7 +118,7 @@ def get_nintendo_digital_price(
         "provider": "Nintendo eShop price API (undocumented)",
         "title_id": title_id,
         "region": country,
-        "currency": currency or ("TWD" if country == "TW" else "JPY"),
+        "currency": currency,
         "sales_status": sales_status or "unknown",
         "available": available,
         "regular_price": regular_amount,
