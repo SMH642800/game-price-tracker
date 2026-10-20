@@ -164,6 +164,51 @@ class WatchlistUpdateTests(unittest.TestCase):
         self.assertEqual(put.call_count, 2)
         sleep.assert_called_once()
 
+class NintendoCommandTests(unittest.IsolatedAsyncioTestCase):
+    async def test_nintendo_autocomplete_returns_catalogue_ids_not_raw_query(self):
+        interaction = AsyncMock()
+        interaction.namespace.platform = "ns"
+        with patch.object(bot, "search_nintendo_games", return_value=[
+            {"name": "薩爾達傳說 時之笛", "product_id": "70010000012345", "platform": "ns"}
+        ]) as search:
+            choices = await bot.platform_autocomplete(interaction, "時之笛")
+        search.assert_called_once_with("時之笛", "ns")
+        self.assertEqual(len(choices), 1)
+        self.assertEqual(choices[0].value, "70010000012345")
+        self.assertIn("Nintendo Switch", choices[0].name)
+
+    async def test_nintendo_lookup_renders_digital_price_and_source_caveat(self):
+        interaction = AsyncMock()
+        entry = {"name": "時之笛", "product_id": "70010000012345", "platform": "ns"}
+        price = {
+            "available": True, "current_price": 1290.0, "regular_price": 1790.0,
+            "discount_price": 1290.0, "currency": "TWD", "region": "TW",
+            "provider": "Nintendo eShop price API (undocumented)",
+            "retrieved_at": "2026-10-20T00:00:00+00:00",
+            "url": "https://ec.nintendo.com/TW/zh/titles/70010000012345",
+        }
+        with patch.object(bot, "get_nintendo_game_by_id", return_value=entry), \
+             patch.object(bot.nintendo, "get_nintendo_digital_price", return_value=price):
+            await bot.handle_nintendo_price_query(interaction, "ns", "70010000012345")
+        interaction.response.defer.assert_awaited_once()
+        message = interaction.followup.send.await_args.args[0]
+        self.assertIn("TWD 1,290", message)
+        self.assertIn("TWD 1,790", message)
+        self.assertIn("數位版", message)
+        self.assertIn("未公開文件化介面", message)
+        self.assertIn("不代表實體卡帶", message)
+
+    async def test_nintendo_lookup_does_not_invent_price_for_missing_record(self):
+        interaction = AsyncMock()
+        entry = {"name": "時之笛", "product_id": "70010000012345", "platform": "ns"}
+        with patch.object(bot, "get_nintendo_game_by_id", return_value=entry), \
+             patch.object(bot.nintendo, "get_nintendo_digital_price", return_value=None):
+            await bot.handle_nintendo_price_query(interaction, "ns", "70010000012345")
+        message = interaction.followup.send.await_args.args[0]
+        self.assertIn("沒有回傳對應的台灣價格紀錄", message)
+        self.assertNotIn("目前價格：", message)
+
+
 class CommandRoutingTests(unittest.IsolatedAsyncioTestCase):
     async def test_steam_lookup_uses_shared_price_handler(self):
         interaction = AsyncMock()
