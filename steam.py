@@ -26,7 +26,7 @@ def _integer_field(value: Any, field: str, *, default: int | None = None) -> int
         return value
     if isinstance(value, str) and value.strip().isdigit():
         return int(value.strip())
-    raise ValueError(f"Steam API returned malformed {field}")
+    raise ValueError(f"Steam API returned malformed price fields ({field})")
 
 
 def _app_details(
