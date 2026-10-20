@@ -296,6 +296,33 @@ class WatchlistUpdateTests(unittest.TestCase):
         self.assertEqual(put.call_count, 2)
         sleep.assert_called_once()
 
+    async def test_remove_unified_nintendo_platform_removes_ns2_row_and_cleans_state(self):
+        interaction = AsyncMock()
+        interaction.user.id = 123
+
+        watchlist = [
+            {"platform": "ns2", "store": "nintendo_eshop", "product_id": "70010000012345", "name": "Switch 2 Game"},
+            {"platform": "steam", "store": "steam", "product_id": "123", "name": "Steam Game"},
+        ]
+        captured = {}
+
+        def apply_mutation(mutator):
+            updated, removed = mutator(watchlist)
+            captured["updated"] = updated
+            captured["removed"] = removed
+            return removed
+
+        with patch.object(bot, "is_admin", return_value=True), \
+             patch.object(bot, "update_github_watchlist", side_effect=apply_mutation), \
+             patch.object(bot, "remove_notification_state_entries", return_value=1) as cleanup:
+            await bot.remove_game.callback(interaction, "nintendo", "70010000012345")
+
+        self.assertEqual([game["product_id"] for game in captured["updated"]], ["123"])
+        self.assertEqual(len(captured["removed"]), 1)
+        cleanup.assert_called_once_with(captured["removed"])
+        message = interaction.followup.send.await_args.args[0]
+        self.assertIn("已清除 1 筆通知狀態", message)
+
 class NintendoCommandTests(unittest.IsolatedAsyncioTestCase):
     async def test_nintendo_autocomplete_returns_catalogue_ids_not_raw_query(self):
         interaction = AsyncMock()
