@@ -64,7 +64,7 @@ class NintendoSourceProbeTests(unittest.TestCase):
             )
             self.assertEqual(cached_rows, rows)
             self.assertTrue(cached_summary["cache_hit"])
-            self.assertEqual(cached_summary["rows_received"], 3)
+            self.assertEqual(cached_summary["rows_received"], 26)
 
     def test_hk_catalogue_probe_uses_hk_catalogue_url_but_keeps_taiwan_price_region(self):
         session = Mock()
