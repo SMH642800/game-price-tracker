@@ -232,7 +232,7 @@ class NotificationStateTests(unittest.TestCase):
             "url": "https://ec.nintendo.com/TW/zh/titles/70010000012345",
         }
 
-        with patch.object(main, "get_nintendo_price", return_value=game), \\
+        with patch.object(main, "get_nintendo_price", return_value=game), \
              patch.object(main, "send_discord_message") as send:
             main.main()
 
@@ -244,7 +244,7 @@ class NotificationStateTests(unittest.TestCase):
             str(int(main.parse_expiration_timestamp(expiration))),
         )
 
-        with patch.object(main, "get_nintendo_price", return_value=game), \\
+        with patch.object(main, "get_nintendo_price", return_value=game), \
              patch.object(main, "send_discord_message") as send_again:
             main.main()
         send_again.assert_not_called()
