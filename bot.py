@@ -570,8 +570,15 @@ async def handle_nintendo_price_query(interaction: discord.Interaction, platform
                 message += f"原價：{result['currency']} {regular:,.0f}（約 {discount}% off）\n"
             elif regular is not None:
                 message += f"原價：{result['currency']} {regular:,.0f}\n"
+            status_labels = {
+                "onsale": "販售中",
+                "on_sale": "販售中",
+                "preorder": "預購中",
+                "pre_order": "預購中",
+            }
+            status_label = status_labels.get(result["sales_status"], result["sales_status"])
             message += (
-                f"區域：台灣（{result['region']}）｜版本：數位版\n"
+                f"狀態：{status_label}｜區域：台灣（{result['region']}）｜版本：數位版\n"
                 f"來源：{result['provider']}（未公開文件化介面）\n"
                 f"查詢時間：{result['retrieved_at']}\n"
                 f"{result['url']}\n"
