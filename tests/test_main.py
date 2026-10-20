@@ -175,12 +175,13 @@ class NotificationStateTests(unittest.TestCase):
             "steam:steam:TW:gone": {"discount": 10, "final_price": 1},
             "steam:steam:JP:123": {"discount": 50, "final_price": 10.0},
         }), encoding="utf-8")
-        with patch.object(main, "get_steam_price", return_value=self.discounted_game(discount=0)), \
-             patch.object(main, "send_discord_message"):
+        with patch.object(main, "get_steam_price", return_value=self.discounted_game()), \
+             patch.object(main, "send_discord_message") as send:
             main.main()
         saved = json.loads(self.state_path.read_text(encoding="utf-8"))
         self.assertNotIn("steam:steam:TW:gone", saved)
-        self.assertIn("steam:steam:JP:123", saved)
+        self.assertEqual(saved["steam:steam:JP:123"], {"discount": 50, "final_price": 10.0})
+        send.assert_not_called()
 
     def test_invalid_watchlist_shape_fails_before_network_calls(self):
         self.watchlist_path.write_text(json.dumps({"not": "a list"}), encoding="utf-8")
