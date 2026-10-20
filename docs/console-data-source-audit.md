@@ -133,7 +133,7 @@ A second public repository, [samsonjaw/tw-switch-price](https://github.com/samso
 
 Its validation script reports a catalogue response shape with `items`, `total`, `title`, and `nsuid`, and a price response with `prices`, `title_id`, `sales_status`, `regular_price`, and optional `discount_price`. This is a useful implementation lead, but it remains community evidence: neither endpoint is documented as a stable public API contract, and the referenced repository does not expose a LICENSE file in the inspected root. We therefore do not copy its code or treat its existence as permission to reuse its dataset.
 
-A low-rate, manual-only diagnostic was added at `scripts/probe_nintendo_sources.py`. It reads the catalogue sequentially (200 ms between page requests), searches the user's test terms (`時之笛`, `亰都幻都`, `京都幻都`, `Kyoto Xanadu`), and requests prices only for matching NSUIDs. It does not write catalogue data, run in CI, or enable production commands. It is a diagnostic script and still needs to be run in an environment with network access.
+A low-rate, manual-only diagnostic was added at `scripts/probe_nintendo_sources.py`. On a cache miss it reads the catalogue sequentially (200 ms between page requests), searches the user's test terms (`時之笛`, `亰都幻都`, `京都幻都`, `Kyoto Xanadu`), and requests prices only for matching NSUIDs. To reduce repeat-run latency, it now caches the catalogue locally for 24 hours at `.cache/nintendo_tw_catalogue.json` (ignored by Git); `--refresh-cache` bypasses the cache and `--no-cache` disables it. Output includes cache status, unique/duplicate NSUID counts, and elapsed-time diagnostics. It remains a manual diagnostic, does not run in CI, and does not enable production commands.
 
 ### Required interpretation of probe output
 
