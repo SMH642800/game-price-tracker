@@ -277,8 +277,24 @@ def main():
                     continue
 
                 if not game.get("available"):
-                    notification_state.pop(state_key, None)
-                    print(f"Not currently for sale: {game['name']}")
+                    sales_status = str(game.get("sales_status") or "").lower()
+                    confirmed_unavailable_statuses = {
+                        "not_for_sale",
+                        "notforsale",
+                        "not_available",
+                        "unavailable",
+                        "discontinued",
+                    }
+                    if sales_status in confirmed_unavailable_statuses:
+                        notification_state.pop(state_key, None)
+                        print(f"Not currently for sale: {game['name']} ({sales_status})")
+                    else:
+                        failure = (
+                            f"Unrecognized Nintendo sales status for NSUID {product_id}: "
+                            f"{sales_status or 'missing'}"
+                        )
+                        failures.append(failure)
+                        print(f"WARNING: {failure}; keeping previous notification state")
                     continue
 
                 if (
