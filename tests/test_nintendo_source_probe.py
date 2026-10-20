@@ -123,9 +123,22 @@ class NintendoSourceProbeTests(unittest.TestCase):
             "total": probe.PAGE_SIZE * (probe.MAX_PAGES + 1),
             "items": [],
         })
-        with self.assertRaisesRegex(ValueError, "safety cap is 500"):
+        with self.assertRaisesRegex(ValueError, "safety cap is 1000"):
             probe.load_catalogue(session, cache_path=None)
         session.get.assert_called_once()
+
+    def test_catalogue_above_warning_threshold_warns_but_continues(self):
+        session = Mock()
+        session.get.return_value = self.make_response({
+            "total": probe.PAGE_SIZE * (probe.WARNING_PAGES + 1),
+            "items": [],
+        })
+        with patch.object(probe.time, "sleep"):
+            with self.assertWarnsRegex(RuntimeWarning, "warning threshold of 800"):
+                rows, summary = probe.load_catalogue(session, cache_path=None)
+        self.assertEqual(summary["pages_requested"], probe.WARNING_PAGES + 1)
+        self.assertEqual(rows, [])
+        self.assertEqual(session.get.call_count, probe.WARNING_PAGES + 1)
 
     def test_malformed_page_schema_fails_closed(self):
         session = Mock()
