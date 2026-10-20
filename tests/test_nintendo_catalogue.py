@@ -73,6 +73,43 @@ class NintendoCatalogueSearchTests(unittest.TestCase):
         self.assertEqual([item["platform"] for item in result], ["ns", "ns2", "nintendo"])
         self.assertFalse(result[2]["platform_verified"])
 
+    def test_curated_fallback_finds_missing_trails_in_the_sky_ordinary_switch_edition(self):
+        results = catalogue.search_nintendo_games("空之軌跡 the 2nd", "nintendo", rows=[])
+        self.assertEqual(
+            results,
+            [{
+                "product_id": "70010000128495",
+                "name": "空之軌跡 the 2nd",
+                "platform": "ns",
+                "platform_verified": True,
+            }],
+        )
+        self.assertEqual(
+            catalogue.search_nintendo_games("空之軌跡 the 2nd", "ns", rows=[])[0]["product_id"],
+            "70010000128495",
+        )
+        self.assertEqual(
+            catalogue.search_nintendo_games("空之軌跡 the 2nd", "ns2", rows=[]),
+            [],
+        )
+
+    def test_curated_fallback_lookup_by_id_works_without_bulk_catalogue_row(self):
+        entry = catalogue.get_nintendo_game_by_id("70010000128495", "ns", rows=[])
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry["name"], "空之軌跡 the 2nd")
+        self.assertEqual(entry["platform"], "ns")
+        self.assertIsNone(catalogue.get_nintendo_game_by_id("70010000128495", "ns2", rows=[]))
+
+    def test_curated_entry_deduplicates_if_bulk_catalogue_later_adds_same_id(self):
+        rows = [{
+            "title": "空之軌跡 the 2nd",
+            "nsuid": "70010000128495",
+            "platform": "Nintendo Switch",
+        }]
+        result = catalogue.search_nintendo_games("空之軌跡 the 2nd", "nintendo", rows=rows)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["product_id"], "70010000128495")
+
     def test_invalid_platform_is_rejected(self):
         with self.assertRaises(ValueError):
             catalogue.search_nintendo_games("Example", "ps5", rows=[])
