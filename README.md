@@ -4,14 +4,15 @@ A Discord-managed game price tracker. The scheduled GitHub Actions workflow curr
 
 ## Current capabilities
 
-- Discord slash commands: `/add`, `/remove`, `/list`, `/price`, `/history`, `/help`, `/ping`, and `/admincheck`.
+- Discord slash commands: `/add`, `/remove`, `/list`, `/price`, `/help`, `/ping`, and `/admincheck`.
 - `/add` and `/remove` ask for a platform first. Steam has live search and price checking; PS5 and Nintendo Switch 2 use title-based lookup and watchlist tracking.
 - `/lookup platform game` returns live Steam prices for Steam, and store plus web price-search links for PS5/NS2. Console links are references, not verified numeric prices.
-- Notification state is stored in `notification_state.json`; corrupted JSON stops the run rather than silently resetting history.
-- `price_history.json` stores up to 365 daily Taiwan-store price observations per product; same-day checks replace that day's sample.
-- `/price` fetches the current Taiwan Steam price. `/history` displays recorded observations and the lowest price observed since tracking began, and links to the matching SteamDB app page for broader historical context.
+- Notification state is stored in `notification_state.json`; corrupted JSON stops the run rather than silently resetting notification state.
+- `/price` fetches the current Taiwan Steam price.
 - Partial price-check failures produce a failed workflow status while successfully sent notification state is still saved.
 - GitHub watchlist updates re-read the current file and retry SHA conflicts to reduce lost updates.
+
+The product scope is current-price lookup and discount notifications only. Historical price collection, historical-price commands, and price-trend charts are out of scope.
 
 ## Platform and deployment direction
 
@@ -33,12 +34,14 @@ Each entry identifies a platform-specific product:
 }
 ```
 
-Historical-price policy: this project separates prices observed directly by the Bot from historical information published by external price-tracking websites. The Bot must not label third-party estimates as its own observations, silently combine the two datasets, or invent missing historical values.
+## Price-source policy
 
-- **Steam:** Steam App Details provides current price, not a complete historical price series. This project records prices from the first successful scheduled check onward. `/history` links to the matching [SteamDB app page](https://steamdb.info/) for broader historical context.
+The Bot must not present unverified sources or inferred prices as directly observed current prices.
+
+- **Steam:** Steam App Details provides current price. `/price` fetches the current Taiwan-store price.
 - **PS5, NS, and NS2:** v1 supports title-based tracking plus store and web price-search links, without inventing product IDs or numeric prices. Console links are references, not verified numeric prices. For Nintendo, digital and physical prices must remain separate, and every price must identify its region, currency, product/edition, source, and retrieval time. Automated numeric console pricing remains disabled until reliable sources and permitted use are verified. A first isolated Nintendo digital-price adapter and mocked tests exist on the PR branch, but they are not wired into Discord commands. Physical game prices require a separate approved retailer source.
 
-SteamDB research note: its [FAQ](https://steamdb.info/faq/) does not offer a generally available public API for this use and disallows unapproved automated scraping. Therefore this project links to SteamDB instead of scraping or importing its data. Direct historical-data import should only be considered if SteamDB provides explicit permission or a supported access method. Do not present SteamDB values as locally verified samples or silently mix them with this Bot's observations.
+SteamDB research note: its [FAQ](https://steamdb.info/faq/) does not offer a generally available public API for this use and disallows unapproved automated scraping. This project does not scrape or import SteamDB data. Do not present third-party values as locally verified current prices.
 
 Legacy Steam entries using `app_id` remain readable. New entries should use `product_id` and explicit `store` / `region` values. Notification-state keys are namespaced as `platform:store:region:product_id`.
 
