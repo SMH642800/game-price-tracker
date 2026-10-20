@@ -191,5 +191,52 @@ class NotificationStateTests(unittest.TestCase):
         get_price.assert_not_called()
 
 
+
+class SteamPriceParsingTests(unittest.TestCase):
+    @patch.object(main.requests, "get")
+    @patch.object(main, "get_steam_discount_expiration", return_value=None)
+    def test_parses_current_price_and_uses_requested_region(self, _expiration, get):
+        response = get.return_value
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"123": {"success": True, "data": {
+            "name": "Example Game",
+            "price_overview": {
+                "currency": "TWD",
+                "final": 9900,
+                "initial": 19900,
+                "discount_percent": 50,
+                "discount_expiration": 1799999999,
+            },
+        }}}
+
+        result = main.get_steam_price("123", "JP")
+
+        self.assertEqual(result["final_price"], 99.0)
+        self.assertEqual(result["initial_price"], 199.0)
+        self.assertEqual(result["discount"], 50)
+        self.assertEqual(result["discount_expiration"], 1799999999)
+        self.assertEqual(get.call_args.kwargs["params"]["cc"], "jp")
+        _expiration.assert_not_called()
+
+    @patch.object(main.requests, "get")
+    def test_malformed_steam_response_shape_is_rejected(self, get):
+        response = get.return_value
+        response.raise_for_status.return_value = None
+        response.json.return_value = []
+
+        with self.assertRaisesRegex(ValueError, "JSON object"):
+            main.get_steam_price("123")
+
+    @patch.object(main.requests, "get")
+    def test_missing_price_overview_returns_no_price(self, get):
+        response = get.return_value
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"123": {"success": True, "data": {
+            "name": "Unavailable Game",
+        }}}
+
+        self.assertIsNone(main.get_steam_price("123"))
+
+
 if __name__ == "__main__":
     unittest.main()
