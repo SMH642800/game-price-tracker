@@ -30,7 +30,8 @@ jobs:
       - name: Download project
         uses: actions/checkout@v4
         with:
-          ref: main
+          # Scheduled runs use main; manual runs use the branch selected in GitHub Actions.
+          ref: ${{ github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -42,7 +43,7 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
 
-      - name: Prepare notification history
+      - name: Prepare notification state
         run: |
           if [ ! -f notification_state.json ]; then
             echo '{}' > notification_state.json
@@ -61,7 +62,7 @@ jobs:
           fi
 
       # Save successful per-game state updates even if another game failed.
-      - name: Save notification history
+      - name: Save notification state
         if: always() && steps.run_tracker.outcome != 'skipped'
         run: |
           git config user.name "github-actions[bot]"
@@ -69,12 +70,13 @@ jobs:
 
           git add notification_state.json
           if ! git diff --cached --quiet; then
-            git commit -m "Update notification history"
-            git fetch origin main
-            git rebase origin/main
-            git push origin HEAD:main
+            git commit -m "Update notification state"
+            TRACKER_BRANCH="$GITHUB_REF_NAME"
+            git fetch origin "$TRACKER_BRANCH"
+            git rebase "origin/$TRACKER_BRANCH"
+            git push origin "HEAD:$TRACKER_BRANCH"
           else
-            echo "Notification history unchanged"
+            echo "Notification state unchanged"
           fi
 
       - name: Notify Discord on failure
@@ -95,7 +97,7 @@ jobs:
           詳細紀錄：${RUN_URL}"
 
           PAYLOAD=$(jq -n --arg content "$MESSAGE" '{content: $content}')
-          curl --fail-with-body --silent --show-error             --max-time 15             -H "Content-Type: application/json"             -X POST             -d "$PAYLOAD"             "$DISCORD_WEBHOOK_URL"
+          curl --fail-with-body --silent --show-error --max-time 15 -H "Content-Type: application/json" -X POST -d "$PAYLOAD" "$DISCORD_WEBHOOK_URL"
 
       - name: Report successful run to Healthchecks
         if: success()

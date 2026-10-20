@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - reliability-multiplatform-v1
+      - feature/stability-price-history-commands
   pull_request:
     branches:
       - main
@@ -15,7 +16,7 @@ permissions:
 jobs:
   tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,6 +29,6 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
       - name: Compile Python files
-        run: python -m compileall -q main.py bot.py tests
+        run: python -m compileall -q main.py bot.py steam.py nintendo.py nintendo_catalogue.py scripts tests
       - name: Run regression tests
         run: python -m unittest discover -s tests -v
