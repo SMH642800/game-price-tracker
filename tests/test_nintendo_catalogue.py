@@ -30,6 +30,26 @@ class NintendoCatalogueSearchTests(unittest.TestCase):
             ["70010000000002"],
         )
 
+    def test_missing_platform_metadata_is_returned_but_marked_unverified(self):
+        rows = [
+            {"title": "薩爾達傳說 時之笛", "nsuid": "70010000130795", "platform": None},
+            {"title": "Kyoto Xanadu NS2 Edition", "nsuid": "70010000130796", "platform": None},
+        ]
+        ns_results = catalogue.search_nintendo_games("時之笛", "ns", rows=rows)
+        ns2_results = catalogue.search_nintendo_games("時之笛", "ns2", rows=rows)
+        self.assertEqual(ns_results[0]["product_id"], "70010000130795")
+        self.assertFalse(ns_results[0]["platform_verified"])
+        self.assertEqual(ns2_results[0]["product_id"], "70010000130795")
+        self.assertFalse(ns2_results[0]["platform_verified"])
+        self.assertEqual(
+            [item["product_id"] for item in catalogue.search_nintendo_games("Kyoto", "ns", rows=rows)],
+            [],
+        )
+        self.assertEqual(
+            catalogue.search_nintendo_games("Kyoto", "ns2", rows=rows)[0]["product_id"],
+            "70010000130796",
+        )
+
     def test_search_deduplicates_nsuid_and_caps_at_25(self):
         rows = [
             {"title": f"Game {index:02}", "nsuid": str(70010000000000 + index), "platform": "Nintendo Switch"}
