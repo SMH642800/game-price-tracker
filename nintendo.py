@@ -99,6 +99,23 @@ def get_nintendo_digital_price(
     sales_status = str(record.get("sales_status", "")).lower()
     regular = record.get("regular_price")
     discount = record.get("discount_price")
+    discount_end_datetime = None
+    if isinstance(discount, dict):
+        raw_end_datetime = discount.get("end_datetime")
+        if isinstance(raw_end_datetime, str) and raw_end_datetime.strip():
+            try:
+                parsed_end = datetime.fromisoformat(
+                    raw_end_datetime.strip().replace("Z", "+00:00")
+                )
+                if parsed_end.tzinfo is not None:
+                    discount_end_datetime = (
+                        parsed_end.astimezone(timezone.utc)
+                        .isoformat()
+                        .replace("+00:00", "Z")
+                    )
+            except ValueError:
+                # Ignore malformed/unzoned source timestamps; never guess a timezone.
+                pass
     regular_amount = _price_amount(regular)
     discount_amount = _price_amount(discount)
     regular_currency = (
@@ -136,6 +153,7 @@ def get_nintendo_digital_price(
         "available": available,
         "regular_price": regular_amount if regular_verified else None,
         "discount_price": discount_amount if discount_verified else None,
+        "discount_end_datetime": discount_end_datetime,
         "current_price": selected_amount if available and currency_verified else None,
         "retrieved_at": datetime.now(timezone.utc).isoformat(),
         "url": (

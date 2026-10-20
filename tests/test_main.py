@@ -148,6 +148,7 @@ class NotificationStateTests(unittest.TestCase):
             "regular_price": 1790.0,
             "current_price": 1290.0,
             "discount": 28,
+            "discount_end_datetime": (main.datetime.now(main.timezone.utc) + main.timedelta(hours=30)).isoformat(),
             "url": "https://ec.nintendo.com/TW/zh/titles/70010000012345",
         }
         with patch.object(main, "get_steam_price") as get_steam_price, \
@@ -161,6 +162,7 @@ class NotificationStateTests(unittest.TestCase):
         self.assertIn("Nintendo Switch 特價通知", message)
         self.assertIn("TWD 1,290", message)
         self.assertIn("TWD 1,790", message)
+        self.assertIn("截止時間：", message)
         saved = json.loads(self.state_path.read_text(encoding="utf-8"))
         self.assertEqual(
             saved["ns2:nintendo_eshop:TW:70010000012345"],
@@ -211,6 +213,56 @@ class NotificationStateTests(unittest.TestCase):
                 main.main()
         get_price.assert_not_called()
 
+
+
+    def test_nintendo_expiry_reminder_sends_once_for_same_sale_end(self):
+        self.write_watchlist([{
+            "platform": "ns2", "store": "nintendo_eshop", "product_id": "70010000012345",
+            "region": "TW", "name": "Switch 2 Digital Game", "price_mode": "digital",
+        }])
+        expiration = (main.datetime.now(main.timezone.utc) + main.timedelta(hours=30)).isoformat()
+        state_key = "ns2:nintendo_eshop:TW:70010000012345"
+        self.state_path.write_text(json.dumps({
+            state_key: {"discount": 28, "final_price": 1290.0}
+        }), encoding="utf-8")
+        game = {
+            "name": "Switch 2 Digital Game", "available": True, "currency": "TWD",
+            "regular_price": 1790.0, "current_price": 1290.0, "discount": 28,
+            "discount_end_datetime": expiration,
+            "url": "https://ec.nintendo.com/TW/zh/titles/70010000012345",
+        }
+
+        with patch.object(main, "get_nintendo_price", return_value=game), \
+             patch.object(main, "send_discord_message") as send:
+            main.main()
+
+        send.assert_called_once()
+        self.assertIn("特價即將結束提醒", send.call_args.args[0])
+        saved = json.loads(self.state_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            saved[state_key]["expiry_reminder_sent_for"],
+            str(int(main.parse_expiration_timestamp(expiration))),
+        )
+
+        with patch.object(main, "get_nintendo_price", return_value=game), \
+             patch.object(main, "send_discord_message") as send_again:
+            main.main()
+        send_again.assert_not_called()
+
+
+    def test_expiry_reminder_window_uses_timezone_aware_provider_timestamp(self):
+        now = main.datetime(2026, 10, 20, 12, 0, tzinfo=main.timezone.utc)
+        within_window = (now + main.timedelta(hours=36)).isoformat()
+        outside_window = (now + main.timedelta(hours=49)).isoformat()
+        already_ended = (now - main.timedelta(minutes=1)).isoformat()
+
+        self.assertEqual(
+            main.due_expiry_reminder_marker(within_window, now),
+            str(int((now + main.timedelta(hours=36)).timestamp())),
+        )
+        self.assertIsNone(main.due_expiry_reminder_marker(outside_window, now))
+        self.assertIsNone(main.due_expiry_reminder_marker(already_ended, now))
+        self.assertIsNone(main.due_expiry_reminder_marker("2026-10-22T12:00:00", now))
 
 
 class SteamPriceParsingTests(unittest.TestCase):
