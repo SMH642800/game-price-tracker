@@ -19,7 +19,11 @@ from typing import Any
 
 import requests
 
-CATALOG_URL = "https://www.nintendo.com/tw/api/software"
+CATALOG_URLS = {
+    "TW": "https://www.nintendo.com/tw/api/software",
+    "HK": "https://www.nintendo.com/hk/api/software",
+}
+CATALOG_URL = CATALOG_URLS["TW"]
 PRICE_URL = "https://api.ec.nintendo.com/v1/price"
 PAGE_SIZE = 24
 REQUEST_DELAY_SECONDS = 0.2
@@ -115,6 +119,7 @@ def load_catalogue(
     *,
     cache_path: Path | None = DEFAULT_CACHE_PATH,
     refresh_cache: bool = False,
+    catalogue_url: str = CATALOG_URL,
 ) -> tuple[list[dict], dict]:
     """Load the catalogue, preferring a fresh local cache unless explicitly refreshed."""
     now = time.time()
@@ -126,7 +131,7 @@ def load_catalogue(
     request_seconds = 0.0
     sleep_seconds = 0.0
     started = time.perf_counter()
-    first = get_json(session, CATALOG_URL, {"sftab": "all", "spage": 1})
+    first = get_json(session, catalogue_url, {"sftab": "all", "spage": 1})
     request_seconds += time.perf_counter() - started
 
     items = first.get("items")
@@ -145,7 +150,7 @@ def load_catalogue(
         sleep_seconds += time.perf_counter() - started
 
         started = time.perf_counter()
-        payload = get_json(session, CATALOG_URL, {"sftab": "all", "spage": page})
+        payload = get_json(session, catalogue_url, {"sftab": "all", "spage": page})
         request_seconds += time.perf_counter() - started
         page_items = payload.get("items")
         if not isinstance(page_items, list):
@@ -231,20 +236,27 @@ def parse_args() -> argparse.Namespace:
         help="neither read nor write a local catalogue cache",
     )
     parser.add_argument(
-        "--cache-path", type=Path, default=DEFAULT_CACHE_PATH,
-        help=f"local cache path (default: {DEFAULT_CACHE_PATH})",
+        "--country", choices=("TW", "HK"), default="TW",
+        help="catalogue region to probe; price lookups still query Taiwan (TW)",
+    )
+    parser.add_argument(
+        "--cache-path", type=Path, default=None,
+        help="local cache path (default: .cache/nintendo_{country.lower()}_catalogue.json)",
     )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    cache_path = None if args.no_cache else args.cache_path
+    default_cache = DEFAULT_CACHE_PATH.parent / f"nintendo_{args.country.lower()}_catalogue.json"
+    cache_path = None if args.no_cache else (args.cache_path or default_cache)
+    catalogue_url = CATALOG_URLS[args.country]
     run_started = time.perf_counter()
     with requests.Session() as session:
         catalogue_started = time.perf_counter()
         rows, catalogue_summary = load_catalogue(
-            session, cache_path=cache_path, refresh_cache=args.refresh_cache
+            session, cache_path=cache_path, refresh_cache=args.refresh_cache,
+            catalogue_url=catalogue_url,
         )
         catalogue_elapsed = time.perf_counter() - catalogue_started
         output: dict[str, Any] = {
@@ -252,6 +264,9 @@ def main() -> int:
                 "Undocumented endpoints: this probe tests current behaviour only; "
                 "it does not establish Nintendo permission for automated reuse."
             ),
+            "catalogue_region": args.country,
+            "catalogue_url": catalogue_url,
+            "price_region": "TW",
             "catalogue": catalogue_summary,
             "queries": {},
         }
