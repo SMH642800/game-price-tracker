@@ -24,6 +24,8 @@ class NintendoDigitalPriceTests(unittest.TestCase):
                 },
                 "discount_price": {
                     "currency": "TWD", "raw_value": "1290", "amount": "TWD 1,290",
+                    "start_datetime": "2026-10-06T16:00:00Z",
+                    "end_datetime": "2026-10-21T15:59:59Z",
                 },
             }]
         })
@@ -35,6 +37,7 @@ class NintendoDigitalPriceTests(unittest.TestCase):
         self.assertEqual(result["current_price"], 1290.0)
         self.assertEqual(result["regular_price"], 1790.0)
         self.assertEqual(result["discount_price"], 1290.0)
+        self.assertEqual(result["discount_end_datetime"], "2026-10-21T15:59:59Z")
         self.assertEqual(result["currency"], "TWD")
         self.assertEqual(result["region"], "TW")
         self.assertEqual(result["title_id"], "70010000012345")
