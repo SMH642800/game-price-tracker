@@ -262,7 +262,7 @@ async def list_games(interaction: discord.Interaction):
         chunks = []
         current = ""
         for line in lines:
-            candidate = f"{current}\\n{line}" if current else line
+            candidate = f"{current}\n{line}" if current else line
             if len(candidate) > 1800 and current:
                 chunks.append(current)
                 current = line
