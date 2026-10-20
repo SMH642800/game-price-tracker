@@ -326,6 +326,7 @@ async def add_game(interaction: discord.Interaction, platform: str, game: str):
         return
     platform = platform.lower()
     if platform in ("ps5", "ns2"):
+        await interaction.response.defer(ephemeral=True, thinking=True)
         try:
             name = " ".join(game.strip().split())
             product_id = platform_product_key(name)
@@ -340,14 +341,14 @@ async def add_game(interaction: discord.Interaction, platform: str, game: str):
                 return games, True
             added = await asyncio.to_thread(update_github_watchlist, add_link_only_mutation)
             status = "已新增" if added else "已在追蹤清單中"
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"✅ **{name}**（{SUPPORTED_PLATFORMS[platform]}／台灣區）{status}。\n"
                 "目前只提供商店與網路價格搜尋連結，不會顯示未驗證的即時價格數字。\n"
                 f"商店查詢：{links['store']}\n價格搜尋參考：{links['price_search']}",
                 ephemeral=True,
             )
         except (requests.RequestException, ValueError, KeyError, TypeError, RuntimeError) as error:
-            await interaction.response.send_message(f"❌ 新增失敗：{type(error).__name__}。請稍後再試。", ephemeral=True)
+            await interaction.followup.send(f"❌ 新增失敗：{type(error).__name__}。請稍後再試。", ephemeral=True)
         return
     if platform != "steam":
         await interaction.response.send_message("❌ 不支援的平台。", ephemeral=True)
