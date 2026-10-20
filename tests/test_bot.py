@@ -40,6 +40,33 @@ class WatchlistUpdateTests(unittest.TestCase):
                 bot.get_steam_current_price("not-an-id")
         get.assert_not_called()
 
+    @patch.object(bot.requests, "get")
+    def test_malformed_steam_api_payload_is_rejected(self, get):
+        response = get.return_value
+        response.raise_for_status.return_value = None
+        response.json.return_value = []
+        with self.assertRaisesRegex(ValueError, "JSON object"):
+            bot.get_steam_current_price("123")
+
+    @patch.object(bot.requests, "get")
+    def test_malformed_steam_price_fields_are_rejected(self, get):
+        response = get.return_value
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"123": {"success": True, "data": {
+            "name": "Example Game",
+            "price_overview": {"currency": "TWD", "final": "bad", "initial": 100},
+        }}}
+        with self.assertRaisesRegex(ValueError, "malformed price fields"):
+            bot.get_steam_current_price("123")
+
+    @patch.object(bot.requests, "get")
+    def test_steam_search_rejects_unexpected_payload_shape(self, get):
+        response = get.return_value
+        response.raise_for_status.return_value = None
+        response.json.return_value = []
+        with self.assertRaisesRegex(ValueError, "JSON object"):
+            bot.search_steam_games("Example")
+
     def test_console_store_links_are_product_specific_searches_and_encoded(self):
         ps5 = bot.platform_store_links("ps5", "Final Fantasy XVI")
         ns = bot.platform_store_links("ns", "薩爾達傳說 王國之淚")
@@ -150,6 +177,14 @@ class CommandRoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Mario Kart World", response)
         self.assertIn("site%3Astore.nintendo.com.tw", response)
         self.assertIn("google.com/search", response)
+
+    async def test_steam_lookup_always_returns_error_message_for_bad_api_payload(self):
+        interaction = AsyncMock()
+        with patch.object(bot, "get_steam_current_price", side_effect=ValueError("bad payload")):
+            await bot.handle_steam_price_query(interaction, "123")
+        interaction.response.defer.assert_awaited_once()
+        interaction.followup.send.assert_awaited_once()
+        self.assertIn("查價服務暫時無法使用", interaction.followup.send.await_args.args[0])
 
 
 if __name__ == "__main__":
