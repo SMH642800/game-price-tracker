@@ -85,9 +85,11 @@ class WatchlistUpdateTests(unittest.TestCase):
         values = {choice.value for choice in bot.PLATFORM_CHOICES}
         self.assertTrue({"steam", "ps5", "ns", "ns2"}.issubset(values))
 
-    def test_history_command_is_not_registered(self):
+    def test_history_and_separate_price_commands_are_not_registered(self):
         self.assertIsNone(bot.tree.get_command("history"))
         self.assertIsNone(bot.tree.get_command("price_history"))
+        self.assertIsNone(bot.tree.get_command("price"))
+        self.assertIsNotNone(bot.tree.get_command("lookup"))
 
     def test_link_only_product_key_is_normalized(self):
         self.assertEqual(bot.platform_product_key("  Mario   Kart World "), "mario kart world")
@@ -170,13 +172,18 @@ class CommandRoutingTests(unittest.IsolatedAsyncioTestCase):
         handler.assert_awaited_once_with(interaction, "123")
         interaction.response.send_message.assert_not_awaited()
 
-    async def test_switch_lookup_returns_specific_search_links(self):
+    async def test_nintendo_lookup_routes_to_catalogue_price_handler(self):
         interaction = AsyncMock()
-        await bot.lookup_command.callback(interaction, "ns2", "Mario Kart World")
-        response = interaction.response.send_message.await_args.args[0]
-        self.assertIn("Mario Kart World", response)
-        self.assertIn("site%3Astore.nintendo.com.tw", response)
-        self.assertIn("google.com/search", response)
+        with patch.object(bot, "handle_nintendo_price_query", new_callable=AsyncMock) as handler:
+            await bot.lookup_command.callback(interaction, "ns", "70010000012345")
+        handler.assert_awaited_once_with(interaction, "ns", "70010000012345")
+        interaction.response.send_message.assert_not_awaited()
+
+    async def test_ns2_lookup_routes_to_its_own_platform_handler(self):
+        interaction = AsyncMock()
+        with patch.object(bot, "handle_nintendo_price_query", new_callable=AsyncMock) as handler:
+            await bot.lookup_command.callback(interaction, "ns2", "70010000012345")
+        handler.assert_awaited_once_with(interaction, "ns2", "70010000012345")
 
     async def test_steam_lookup_always_returns_error_message_for_bad_api_payload(self):
         interaction = AsyncMock()
