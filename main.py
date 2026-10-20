@@ -51,7 +51,7 @@ def get_steam_price(app_id, region="TW"):
         "discount": price.get("discount_percent", 0),
         "discount_expiration": (
             price.get("discount_expiration")
-            or get_steam_discount_expiration(app_id)
+            or get_steam_discount_expiration(app_id, region)
         ),
         "url": f"https://store.steampowered.com/app/{app_id}/",
     }
@@ -93,10 +93,10 @@ def load_notification_state():
         raise RuntimeError("notification_state.json must contain a JSON object")
     migrated = {}
     for key, value in state.items():
-        migrated[f"steam:steam:TW:{key}"] = value if str(key).isdigit() else value
-        if not str(key).isdigit():
+        if str(key).isdigit():
+            migrated[f"steam:steam:TW:{key}"] = value
+        else:
             migrated[key] = value
-            migrated.pop(f"steam:steam:TW:{key}", None)
     return migrated
 
 
