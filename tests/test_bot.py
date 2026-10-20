@@ -123,10 +123,31 @@ class WatchlistUpdateTests(unittest.TestCase):
         self.assertTrue(result)
         put.assert_called_once()
         payload = put.call_args.kwargs["json"]
+        self.assertEqual(payload["branch"], bot.GITHUB_BRANCH)
         import base64
         import json
         written = json.loads(base64.b64decode(payload["content"]).decode("utf-8"))
         self.assertEqual([game["product_id"] for game in written], ["1", "2"])
+
+    @patch.object(bot, "github_headers", return_value={"Accept": "application/vnd.github+json"})
+    @patch.object(bot.requests, "get")
+    def test_watchlist_read_uses_configured_branch(self, get, _headers):
+        import base64
+        import json
+        response = get.return_value
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "content": base64.b64encode(b"[]").decode("ascii"),
+            "sha": "watchlist-sha",
+        }
+        with patch.object(bot, "GITHUB_BRANCH", "feature/stability-price-history-commands"):
+            games, sha = bot.fetch_github_watchlist_with_sha()
+        self.assertEqual(games, [])
+        self.assertEqual(sha, "watchlist-sha")
+        self.assertEqual(
+            get.call_args.kwargs["params"],
+            {"ref": "feature/stability-price-history-commands"},
+        )
 
     @patch.object(bot, "github_headers", return_value={"Accept": "application/vnd.github+json"})
     @patch.object(bot.requests, "put")
