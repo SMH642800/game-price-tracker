@@ -106,6 +106,80 @@ def update_github_watchlist(mutator, retries=5):
     raise RuntimeError("Could not update watchlist after concurrent changes") from last_error
 
 
+def remove_notification_state_entries(removed_games, retries=5):
+    """Delete removed products' discount records from notification_state.json on GitHub."""
+    if not removed_games:
+        return 0
+
+    removed_ids_by_platform = {}
+    for game in removed_games:
+        platform = platform_of(game)
+        product_id = product_id_of(game)
+        if not product_id:
+            continue
+        platforms = {"ns", "ns2", "nintendo"} if platform in {"ns", "ns2", "nintendo"} else {platform}
+        for supported_platform in platforms:
+            removed_ids_by_platform.setdefault(supported_platform, set()).add(product_id)
+
+    if not removed_ids_by_platform:
+        return 0
+
+    state_url = f"{GITHUB_CONTENTS_URL}/notification_state.json"
+    last_error = None
+    for attempt in range(retries):
+        response = requests.get(
+            state_url,
+            headers=github_headers(),
+            params={"ref": GITHUB_BRANCH},
+            timeout=15,
+        )
+        if response.status_code == 404:
+            return 0
+        response.raise_for_status()
+        payload = response.json()
+        state = json.loads(base64.b64decode(payload["content"]).decode("utf-8"))
+        if not isinstance(state, dict):
+            raise ValueError("notification_state.json must be a JSON object")
+
+        stale_keys = []
+        for key in state:
+            parts = str(key).split(":")
+            if len(parts) == 4:
+                platform, _store, _region, product_id = parts
+                if product_id in removed_ids_by_platform.get(platform, set()):
+                    stale_keys.append(key)
+            elif str(key).isdigit() and str(key) in removed_ids_by_platform.get("steam", set()):
+                stale_keys.append(key)
+
+        if not stale_keys:
+            return 0
+
+        for key in stale_keys:
+            state.pop(key, None)
+        content = json.dumps(state, ensure_ascii=False, indent=2) + "\n"
+        update = requests.put(
+            state_url,
+            headers=github_headers(),
+            json={
+                "message": "Remove notification state for untracked games",
+                "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
+                "sha": payload["sha"],
+                "branch": GITHUB_BRANCH,
+            },
+            timeout=15,
+        )
+        if update.status_code == 409:
+            last_error = requests.HTTPError(
+                f"GitHub notification state changed concurrently (HTTP {update.status_code})"
+            )
+            time.sleep(0.2 * (attempt + 1))
+            continue
+        update.raise_for_status()
+        return len(stale_keys)
+
+    raise RuntimeError("Could not clean notification state after concurrent changes") from last_error
+
+
 def search_steam_games(query):
     """Search the Taiwan Steam store through the shared provider adapter."""
     return steam.search_games(query, region="TW", language="tchinese")
@@ -366,23 +440,36 @@ async def remove_game(interaction: discord.Interaction, platform: str, game: str
     await interaction.response.defer(ephemeral=True, thinking=True)
     try:
         def remove_mutation(games):
+            valid_platforms = {"ns", "ns2", "nintendo"} if platform == "nintendo" else {platform}
             removed = [
                 item for item in games
-                if platform_of(item) in ({"ns", "ns2", "nintendo"} if platform == "nintendo" else {platform}) and product_id_of(item) == product_id
+                if platform_of(item) in valid_platforms and product_id_of(item) == product_id
             ]
             if not removed:
                 return games, None
-            return [
+            remaining = [
                 item for item in games
-                if not (platform_of(item) == platform and product_id_of(item) == product_id)
-            ], removed[0]
+                if not (platform_of(item) in valid_platforms and product_id_of(item) == product_id)
+            ]
+            return remaining, removed
 
         removed = await asyncio.to_thread(update_github_watchlist, remove_mutation)
         if removed is None:
             await interaction.followup.send("⚠️ 找不到該平台的追蹤遊戲，清單未變更。", ephemeral=True)
             return
+        try:
+            cleaned_count = await asyncio.to_thread(remove_notification_state_entries, removed)
+        except (requests.RequestException, ValueError, KeyError, TypeError, RuntimeError) as state_error:
+            print(f"Watchlist removal succeeded but notification-state cleanup failed: {type(state_error).__name__}: {state_error}")
+            await interaction.followup.send(
+                f"⚠️ 已從追蹤清單移除 {len(removed)} 款遊戲，但通知狀態未能立即清理；下一次排程會自動清除過期狀態。",
+                ephemeral=True,
+            )
+            return
+        removed_names = "、".join(str(item.get("name", "未知遊戲")) for item in removed)
         await interaction.followup.send(
-            f"✅ 已從 {SUPPORTED_PLATFORMS.get(platform, platform)} 移除 **{removed.get('name', '未知遊戲')}**。",
+            f"✅ 已從 {SUPPORTED_PLATFORMS.get(platform, platform)} 移除 **{removed_names}**。"
+            + (f" 已清除 {cleaned_count} 筆通知狀態。" if cleaned_count else " 沒有殘留的通知狀態。"),
             ephemeral=True,
         )
     except (requests.RequestException, ValueError, KeyError, TypeError, RuntimeError):
