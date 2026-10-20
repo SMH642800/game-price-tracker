@@ -40,23 +40,35 @@ def title_of(row: dict[str, Any]) -> str:
     return ""
 
 
+def inferred_platform(row: dict[str, Any]) -> str:
+    """Return a generation only when metadata or an explicit edition marker supports it."""
+    value = row.get("platform")
+    if isinstance(value, str) and value.strip():
+        normalized = normalize(value)
+        if "2" in normalized or "switch2" in normalized:
+            return "ns2"
+        if "switch" in normalized or "任天堂" in normalized:
+            return "ns"
+    title = normalize(title_of(row))
+    if any(marker in title for marker in ("switch2edition", "nintendoswitch2", "ns2edition")):
+        return "ns2"
+    return "nintendo"
+
+
 def platform_matches(row: dict[str, Any], platform: str) -> bool:
     value = row.get("platform")
     title = normalize(title_of(row))
-    # Some valid catalogue entries (including probe-confirmed priced titles)
-    # omit platform metadata. Keep those searchable, but mark them unverified
-    # in the returned choice/result rather than asserting a generation.
+    # Unified Nintendo searches both generations. Missing metadata remains searchable
+    # but is labelled unverified rather than assigned to a generation by guesswork.
+    if platform == "nintendo":
+        return True
     if not isinstance(value, str) or not value.strip():
-        is_explicit_switch_2_edition = any(
-            marker in title for marker in ("switch2edition", "nintendoswitch2", "ns2edition")
-        )
-        return not (platform == "ns" and is_explicit_switch_2_edition)
-    normalized = normalize(value)
-    is_switch_2 = "2" in normalized or "switch2" in normalized
+        return not (platform == "ns" and inferred_platform(row) == "ns2")
+    actual = inferred_platform(row)
     if platform == "ns2":
-        return is_switch_2
+        return actual == "ns2"
     if platform == "ns":
-        return not is_switch_2 and ("switch" in normalized or "任天堂" in normalized)
+        return actual == "ns"
     return False
 
 
@@ -112,7 +124,7 @@ def search_nintendo_games(
         matches.append({
             "product_id": nsuid,
             "name": title,
-            "platform": platform,
+            "platform": inferred_platform(row),
             "platform_verified": isinstance(row.get("platform"), str) and bool(row.get("platform", "").strip()),
         })
         if len(matches) >= max(1, min(limit, 25)):
@@ -136,7 +148,7 @@ def get_nintendo_game_by_id(
             return {
                 "product_id": product_id,
                 "name": title_of(row),
-                "platform": platform,
+                "platform": inferred_platform(row),
                 "platform_verified": isinstance(row.get("platform"), str) and bool(row.get("platform", "").strip()),
             }
     return None
