@@ -1,0 +1,21 @@
+
+name: Schedule Diagnostic
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scheduler-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Confirm scheduled execution
+        run: |
+          echo "Schedule diagnostic succeeded."
+          echo "UTC time: $(date -u)"
