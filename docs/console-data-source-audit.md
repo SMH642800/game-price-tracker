@@ -69,3 +69,34 @@ A third-party retailer source must expose the exact product/edition and TWD pric
 ## Current decision
 
 **No third-party catalogue or numeric console-price provider is approved yet.** The available repository tools can inspect and modify GitHub repository resources, but do not provide a general web browser for independently validating non-GitHub vendor terms and live endpoints. Therefore the implementation must not claim source verification is complete. Next step is to review official source documentation/terms and record the exact URLs and allowed use here, then implement only against the approved provider(s).
+
+
+## Additional source leads (reviewed 2026-10-20)
+
+### Nintendo price endpoint lead
+
+A public GitHub project, [Switch-eShopRadar](https://github.com/YuHaoLiaoSideProject/Switch-eShopRadar), documents a community smoke test of:
+
+- `https://api.ec.nintendo.com/v1/price?country=TW&lang=zh&ids=...`
+- It reports `lang=zh` or `lang=en` is required (`zh-TW` reportedly returns HTTP 400), a batch limit of 50 IDs, and fields including `sales_status`, `regular_price`, and sometimes `discount_price`.
+- Its own decision record explicitly classifies Nintendo price/catalog endpoints as **undocumented/non-official interfaces subject to change**, despite being hosted on a Nintendo domain.
+
+This is useful evidence that a Taiwan price endpoint may work, but it is **not Nintendo API documentation or permission to automate it**. Before enabling it in production, verify with a live request against known NSUIDs (including a discounted title, a non-discounted title, an unavailable title, and a Switch 2-specific title), record actual response shapes, and review Nintendo's applicable terms/robots guidance. The endpoint alone cannot identify games; a catalogue that maps a title to the correct NSUID is still required. Do not reuse third-party Algolia application credentials or assume their quota/terms permit this bot.
+
+Reference reviewed: [Switch-eShopRadar technical decision record](https://github.com/YuHaoLiaoSideProject/Switch-eShopRadar/blob/7eb7fe9a5b2a98f81cad65d1aad2dc5dd1fd3ba0/docs/tech-decision-Switch-eShopRadar-2026-08-23.md).
+
+### eShop-Prices
+
+User supplied an example game page at [eShop-Prices](https://eshop-prices.com/games/21892-the-legend-of-zelda-ocarina-of-time). The site appears useful as a possible source of English-titled, multi-region digital-price comparisons, but a game page is not an API contract. We have not verified whether the site provides a supported public API, its terms for automated access/reuse, rate limits, caching rules, or whether its displayed values can be consumed without scraping. **Do not scrape pages or import its data until those checks are completed.** If no permitted API is documented, use the site as a human-facing link only.
+
+### Catalogue/autocomplete direction
+
+- The Nintendo price endpoint is a price lookup by product/NSUID, not a title-search catalogue.
+- The cited Switch-eShopRadar record says the official Taiwan software listing is only a partial seed and its US Algolia index is a third-party/unofficial discovery source. The record is useful as a lead, not a licence grant or independent proof of current availability.
+- A catalogue candidate must identify Nintendo Switch 2 specifically and return a stable product ID. Search results must not be matched to price records by title text alone.
+- For Taiwan-first digital lookup, query the Taiwan price source only after a catalogue result supplies a verified regional product ID. If the product is not available in Taiwan, the fallback should be an explicitly labelled Japan-region lookup using a Japanese-region product ID and JPY currency. Do not infer Taiwan unavailability from a generic HTTP error or silently convert JPY to TWD.
+- Physical pricing remains a separate provider and data model. The Nintendo digital-price endpoint must never be treated as a physical retailer price feed.
+
+### Current verification status
+
+The available tools in this work session can inspect public GitHub content but cannot directly run reproducible requests against Nintendo or eShop-Prices, nor inspect those sites' current legal/robots pages. Accordingly, the Nintendo endpoint is a **promising but unapproved technical lead**; eShop-Prices is a **human-reference lead only**. Numeric Nintendo prices and catalogue-backed autocomplete remain gated until a live smoke test and permitted-use review are documented.
