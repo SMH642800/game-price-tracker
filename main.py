@@ -378,10 +378,13 @@ def main():
             if not same_deal:
                 send_discord_message(message)
                 updated_state = dict(current_deal)
-                if isinstance(previous_state, dict):
-                    updated_state["expiry_reminder_sent_for"] = previous_state.get(
+                if (
+                    isinstance(previous_state, dict)
+                    and previous_state.get("expiry_reminder_sent_for")
+                ):
+                    updated_state["expiry_reminder_sent_for"] = previous_state[
                         "expiry_reminder_sent_for"
-                    )
+                    ]
                 notification_state[state_key] = updated_state
                 save_notification_state(notification_state)
                 print(f"Notification sent: {game['name']}")
