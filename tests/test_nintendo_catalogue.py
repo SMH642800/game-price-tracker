@@ -40,14 +40,12 @@ class NintendoCatalogueSearchTests(unittest.TestCase):
         self.assertFalse(ns_results[0]["platform_verified"])
         self.assertEqual(ns2_results[0]["product_id"], "70010000130795")
         self.assertFalse(ns2_results[0]["platform_verified"])
-        self.assertEqual(
-            [item["product_id"] for item in catalogue.search_nintendo_games("Kyoto", "ns", rows=rows)],
-            [],
-        )
-        self.assertEqual(
-            catalogue.search_nintendo_games("Kyoto", "ns2", rows=rows)[0]["product_id"],
-            "70010000130796",
-        )
+        for platform in ("nintendo", "ns", "ns2"):
+            with self.subTest(platform=platform):
+                self.assertEqual(
+                    catalogue.search_nintendo_games("Kyoto", platform, rows=rows)[0]["product_id"],
+                    "70010000130796",
+                )
 
     def test_search_deduplicates_nsuid_and_caps_at_25(self):
         rows = [
@@ -88,8 +86,8 @@ class NintendoCatalogueSearchTests(unittest.TestCase):
             "70010000128495",
         )
         self.assertEqual(
-            catalogue.search_nintendo_games("空之軌跡 the 2nd", "ns2", rows=[]),
-            [],
+            catalogue.search_nintendo_games("空之軌跡 the 2nd", "ns2", rows=[])[0]["product_id"],
+            "70010000128495",
         )
 
     def test_curated_fallback_lookup_by_id_works_without_bulk_catalogue_row(self):
