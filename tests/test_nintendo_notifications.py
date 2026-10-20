@@ -158,7 +158,7 @@ class NintendoScheduledNotificationTests(unittest.TestCase):
             "url": "https://ec.nintendo.com/TW/zh/titles/70010000012345",
         }
 
-        with patch.object(main, "get_nintendo_price", return_value=unknown_status), \\
+        with patch.object(main, "get_nintendo_price", return_value=unknown_status), \
              patch.object(main, "send_discord_message") as send:
             with self.assertRaises(SystemExit) as exc:
                 main.main()
