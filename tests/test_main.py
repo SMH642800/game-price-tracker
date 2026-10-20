@@ -229,6 +229,19 @@ class SteamPriceParsingTests(unittest.TestCase):
             main.get_steam_price("123")
 
     @patch.object(main.requests, "get")
+    def test_price_record_without_currency_is_rejected(self, get):
+        response = get.return_value
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"123": {"success": True, "data": {
+            "name": "Example Game",
+            "price_overview": {
+                "final": 9900, "initial": 9900, "discount_percent": 0,
+            },
+        }}}
+        with self.assertRaisesRegex(ValueError, "no currency"):
+            main.get_steam_price("123")
+
+    @patch.object(main.requests, "get")
     def test_missing_price_overview_returns_no_price(self, get):
         response = get.return_value
         response.raise_for_status.return_value = None
