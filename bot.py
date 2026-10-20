@@ -241,31 +241,39 @@ async def list_games(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True, thinking=True)
     try:
         games = await asyncio.to_thread(load_github_watchlist)
-        embed = discord.Embed(
-            title="🎮 遊戲追蹤清單",
-            description=f"目前共追蹤 **{len(games)}** 款遊戲",
-            color=discord.Color.blurple(),
-        )
-        if not games:
-            embed.description = "目前沒有追蹤任何遊戲。"
+        lines = [f"🎮 **遊戲追蹤清單**（共 {len(games)} 款）"]
         for platform, platform_name in SUPPORTED_PLATFORMS.items():
-            platform_games = [game for game in games if platform_of(game) == platform]
+            platform_games = [item for item in games if platform_of(item) == platform]
             if not platform_games:
                 continue
-            embed.add_field(
-                name=f"🕹️ {platform_name}（{len(platform_games)} 款）",
-                value="\u200b",
-                inline=False,
-            )
-            for index, game in enumerate(platform_games, start=1):
-                product_id = product_id_of(game)
-                details = f"**{index}. {game.get('name', '未知遊戲')}**"
-                if product_id:
-                    details += f"\n產品 ID：`{product_id}`"
-                details += f"\n地區：`{game.get('region', 'TW')}`"
-                embed.add_field(name="\u200b", value=details, inline=False)
-        embed.set_footer(text="Game Price Tracker")
-        await interaction.followup.send(embed=embed, ephemeral=True)
+            lines.append("")
+            lines.append(f"🕹️ **{platform_name}（{len(platform_games)} 款）**")
+            for item in platform_games:
+                product_id = product_id_of(item)
+                name = str(item.get("name", "未知遊戲")).replace("\\n", " ").strip()
+                region = str(item.get("region", "TW"))
+                lines.append(f"• **{name[:120]}** — ID: `{product_id or '未知'}`（{region}）")
+
+        if not games:
+            lines.append("目前沒有追蹤任何遊戲。")
+
+        # Discord message content is limited to 2,000 characters. Split at line
+        # boundaries to keep large watchlists usable instead of exceeding embed limits.
+        chunks = []
+        current = ""
+        for line in lines:
+            candidate = f"{current}\\n{line}" if current else line
+            if len(candidate) > 1800 and current:
+                chunks.append(current)
+                current = line
+            else:
+                current = candidate
+        if current:
+            chunks.append(current)
+
+        await interaction.followup.send(chunks[0], ephemeral=True)
+        for chunk in chunks[1:]:
+            await interaction.followup.send(chunk, ephemeral=True)
     except requests.RequestException:
         await interaction.followup.send("❌ 暫時無法連線至 GitHub，請稍後再試。", ephemeral=True)
     except (ValueError, KeyError, TypeError, RuntimeError):
