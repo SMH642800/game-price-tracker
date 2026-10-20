@@ -354,7 +354,46 @@ async def add_game(interaction: discord.Interaction, platform: str, game: str):
         await interaction.response.send_message("⛔ 你沒有 Bot 管理員權限。", ephemeral=True)
         return
     platform = platform.lower()
-    if platform in ("ps5", "ns2"):
+    if platform in ("ns", "ns2"):
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        try:
+            product_id = game.strip()
+            entry = await asyncio.to_thread(get_nintendo_game_by_id, product_id, platform)
+            if entry is None:
+                await interaction.followup.send(
+                    f"❌ 請從 {SUPPORTED_PLATFORMS[platform]} 的目錄搜尋結果中選擇遊戲。",
+                    ephemeral=True,
+                )
+                return
+
+            def add_nintendo_mutation(games):
+                if any(platform_of(item) == platform and product_id_of(item) == product_id for item in games):
+                    return games, False
+                games.append({
+                    "platform": platform,
+                    "store": "nintendo_eshop",
+                    "product_id": product_id,
+                    "region": "TW",
+                    "name": entry["name"],
+                    "edition": "digital",
+                    "price_mode": "digital",
+                })
+                return games, True
+
+            added = await asyncio.to_thread(update_github_watchlist, add_nintendo_mutation)
+            status = "已新增到追蹤清單" if added else "已在追蹤清單中"
+            await interaction.followup.send(
+                f"✅ {entry['name']}（{SUPPORTED_PLATFORMS[platform]}／台灣數位版，NSUID：{product_id}）{status}。\\n"
+                "實體版價格不包含在內；Nintendo 數位價格介面尚未公開文件化。",
+                ephemeral=True,
+            )
+        except (requests.RequestException, NintendoCatalogueError, ValueError, KeyError, TypeError, RuntimeError) as error:
+            await interaction.followup.send(
+                f"❌ 新增失敗：{type(error).__name__}。請確認目錄快取並稍後再試。",
+                ephemeral=True,
+            )
+        return
+    if platform == "ps5":
         await interaction.response.defer(ephemeral=True, thinking=True)
         try:
             name = " ".join(game.strip().split())
@@ -371,9 +410,9 @@ async def add_game(interaction: discord.Interaction, platform: str, game: str):
             added = await asyncio.to_thread(update_github_watchlist, add_link_only_mutation)
             status = "已新增" if added else "已在追蹤清單中"
             await interaction.followup.send(
-                f"✅ **{name}**（{SUPPORTED_PLATFORMS[platform]}／台灣區）{status}。\n"
-                "目前只提供商店與網路價格搜尋連結，不會顯示未驗證的即時價格數字。\n"
-                f"商店查詢：{links['store']}\n價格搜尋參考：{links['price_search']}",
+                f"✅ {name}（{SUPPORTED_PLATFORMS[platform]}／台灣區）{status}。\\n"
+                "目前只提供商店與網路價格搜尋連結，不會顯示未驗證的即時價格數字。\\n"
+                f"商店查詢：{links['store']}\\n價格搜尋參考：{links['price_search']}",
                 ephemeral=True,
             )
         except (requests.RequestException, ValueError, KeyError, TypeError, RuntimeError) as error:
