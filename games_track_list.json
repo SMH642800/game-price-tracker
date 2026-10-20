@@ -26,5 +26,15 @@
     "product_id": "1245620",
     "region": "TW",
     "name": "艾爾登法環"
+  },
+  {
+    "platform": "nintendo",
+    "store": "nintendo_eshop",
+    "product_id": "70010000130930",
+    "region": "TW",
+    "name": "亰都幻都 -櫻花幻舞- Nintendo Switch 2 Edition",
+    "edition": "digital",
+    "price_mode": "digital",
+    "catalogue_platform_verified": false
   }
 ]
