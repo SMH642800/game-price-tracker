@@ -60,7 +60,7 @@ A manual, low-rate probe for Nintendo Taiwan's candidate catalogue and digital-p
 python scripts/probe_nintendo_sources.py
 ```
 
-It searches the catalogue for 時之笛 and 亰都幻都 / Kyoto Xanadu, then requests price data only for matching NSUIDs. It does not save a catalogue, run in CI, or enable numeric prices in Discord. The endpoints are undocumented and automated reuse permissions have not been confirmed; a successful probe is technical evidence only, not approval to enable production automation. See `docs/console-data-source-audit.md` for the current source gates.
+It searches the catalogue for 時之笛 and 亰都幻都 / Kyoto Xanadu, then requests price data only for matching NSUIDs. To avoid downloading all pages on every development run, it stores a local 24-hour catalogue cache at `.cache/nintendo_tw_catalogue.json` (ignored by Git). Use `--refresh-cache` to fetch the catalogue again or `--no-cache` to disable caching. The output includes cache status, duplicate NSUID counts, and elapsed-time diagnostics. It does not run in CI or enable numeric prices in Discord. The endpoints are undocumented and automated reuse permissions have not been confirmed; a successful probe is technical evidence only, not approval to enable production automation. See `docs/console-data-source-audit.md` for the current source gates.
 
 ## Local checks
 
