@@ -21,6 +21,7 @@ ADMIN_ID = os.getenv("DISCORD_ADMIN_ID")
 GUILD_ID = os.getenv("DISCORD_GUILD_ID")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_REPO = "SMH642800/game-price-tracker"
+GITHUB_BRANCH = os.getenv("GITHUB_BRANCH", "main")
 GITHUB_FILE_PATH = "games_track_list.json"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
 GITHUB_CONTENTS_URL = f"https://api.github.com/repos/{GITHUB_REPO}/contents"
@@ -47,7 +48,9 @@ def github_headers():
 
 
 def fetch_github_watchlist_with_sha():
-    response = requests.get(GITHUB_API_URL, headers=github_headers(), timeout=15)
+    response = requests.get(
+        GITHUB_API_URL, headers=github_headers(), params={"ref": GITHUB_BRANCH}, timeout=15
+    )
     response.raise_for_status()
     payload = response.json()
     content = base64.b64decode(payload["content"]).decode("utf-8")
@@ -85,6 +88,7 @@ def update_github_watchlist(mutator, retries=5):
                 "message": "Update tracked games via Discord bot",
                 "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
                 "sha": sha,
+                "branch": GITHUB_BRANCH,
             },
             timeout=15,
         )
