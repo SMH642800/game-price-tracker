@@ -12,6 +12,7 @@ A Discord-managed game price tracker. The scheduled GitHub Actions workflow chec
 - PS5 is out of scope for automated lookup and adding new watchlist entries. Existing manually maintained PS5 rows remain visible in `/list` and removable through `/remove`.
 - Scheduled discount notifications support Steam and eligible Nintendo Switch / Switch 2 digital products in Taiwan. Nintendo price checks use an undocumented endpoint and remain experimental; non-supported rows are skipped rather than sent to Steam APIs.
 - Notification state is stored in `notification_state.json`; invalid JSON stops the run rather than silently resetting notification state.
+- When a tracked Steam or Nintendo discount has a valid end time, the daily check sends one additional reminder when it first detects the sale ending within 48 hours. Reminder delivery follows the daily schedule and is not guaranteed at exactly 48 hours before expiry.
 - Partial price-check failures produce a failed workflow status while successful notification state is still saved. GitHub watchlist updates re-read the current file and retry explicit SHA conflicts to reduce lost updates.
 
 The product scope is current-price lookup and discount notifications only. Historical price collection, historical-price commands, and price-trend charts are out of scope. There is no separate `/price` or `/history` command.
