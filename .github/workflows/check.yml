@@ -30,7 +30,8 @@ jobs:
       - name: Download project
         uses: actions/checkout@v4
         with:
-          ref: main
+          # Scheduled runs use main; manual runs use the branch selected in GitHub Actions.
+          ref: ${{ github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -70,9 +71,10 @@ jobs:
           git add notification_state.json
           if ! git diff --cached --quiet; then
             git commit -m "Update notification state"
-            git fetch origin main
-            git rebase origin/main
-            git push origin HEAD:main
+            TRACKER_BRANCH="$GITHUB_REF_NAME"
+            git fetch origin "$TRACKER_BRANCH"
+            git rebase "origin/$TRACKER_BRANCH"
+            git push origin "HEAD:$TRACKER_BRANCH"
           else
             echo "Notification state unchanged"
           fi
