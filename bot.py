@@ -524,15 +524,72 @@ async def handle_steam_price_query(interaction: discord.Interaction, product_id:
         await interaction.followup.send("❌ 查價服務暫時無法使用，請稍後再試。", ephemeral=True)
 
 
-@tree.command(name="price", description="查詢 Steam 台灣商店目前價格")
-@app_commands.describe(game="輸入遊戲名稱，並從 Steam 搜尋結果中選擇")
-@app_commands.autocomplete(game=platform_autocomplete)
-async def price_command(interaction: discord.Interaction, game: str):
-    await handle_steam_price_query(interaction, game)
+async def handle_nintendo_price_query(interaction: discord.Interaction, platform: str, product_id: str):
+    """Look up a catalogue-selected Nintendo digital edition by stable NSUID."""
+    product_id = product_id.strip()
+    if not product_id.isdigit():
+        await interaction.response.send_message(
+            f"❌ 請從 {SUPPORTED_PLATFORMS[platform]} 的目錄搜尋結果中選擇遊戲。",
+            ephemeral=True,
+        )
+        return
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    try:
+        entry = await asyncio.to_thread(get_nintendo_game_by_id, product_id, platform)
+        if entry is None:
+            await interaction.followup.send(
+                "❌ 找不到這個平台與 NSUID 對應的目錄項目；請重新搜尋並選擇正確版本。",
+                ephemeral=True,
+            )
+            return
+        result = await asyncio.to_thread(nintendo.get_nintendo_digital_price, product_id, "TW", "zh")
+        if result is None:
+            message = (
+                f"🎮 **{entry['name']}**｜{SUPPORTED_PLATFORMS[platform]} 台灣數位版\n"
+                "目錄已找到遊戲，但價格介面沒有回傳對應的台灣價格紀錄。\n"
+                f"{entry_url(product_id)}"
+            )
+        elif not result["available"] or result["current_price"] is None:
+            message = (
+                f"🎮 **{entry['name']}**｜{SUPPORTED_PLATFORMS[platform]} 台灣數位版\n"
+                "目前沒有可用的台灣數位售價；不會以其他地區或實體版價格代替。\n"
+                f"{result['url']}"
+            )
+        else:
+            current = result["current_price"]
+            regular = result["regular_price"]
+            message = (
+                f"🎮 **{entry['name']}**｜{SUPPORTED_PLATFORMS[platform]} 台灣數位版\n"
+                f"目前價格：**{result['currency']} {current:,.0f}**\n"
+            )
+            if regular is not None and regular > current:
+                discount = round((1 - current / regular) * 100)
+                message += f"原價：{result['currency']} {regular:,.0f}（約 {discount}% off）\n"
+            elif regular is not None:
+                message += f"原價：{result['currency']} {regular:,.0f}\n"
+            message += (
+                f"區域：台灣（{result['region']}）｜版本：數位版\n"
+                f"來源：{result['provider']}（未公開文件化介面）\n"
+                f"查詢時間：{result['retrieved_at']}\n"
+                f"{result['url']}\n"
+                "注意：這是數位版價格，不代表實體卡帶／零售商價格。"
+            )
+        await interaction.followup.send(message, ephemeral=True)
+    except (requests.RequestException, NintendoCatalogueError, nintendo.NintendoPriceError,
+            ValueError, KeyError, TypeError, AttributeError, RuntimeError) as error:
+        print(f"Nintendo price query failed for {platform}/{product_id}: {type(error).__name__}: {error}")
+        await interaction.followup.send(
+            "❌ Nintendo 查價暫時無法使用。請確認目錄快取未過期、價格介面正常，稍後再試。",
+            ephemeral=True,
+        )
 
 
-@tree.command(name="lookup", description="查詢平台商店與價格參考連結")
-@app_commands.describe(platform="選擇遊戲平台", game="輸入遊戲名稱；Steam 可從搜尋結果選擇")
+def entry_url(product_id: str) -> str:
+    return f"https://ec.nintendo.com/TW/zh/titles/{product_id}"
+
+
+@tree.command(name="lookup", description="查詢遊戲目前價格或平台商店連結")
+@app_commands.describe(platform="選擇遊戲平台", game="輸入遊戲名稱並從目錄／搜尋結果中選擇")
 @app_commands.choices(platform=PLATFORM_CHOICES)
 @app_commands.autocomplete(game=platform_autocomplete)
 async def lookup_command(interaction: discord.Interaction, platform: str, game: str):
@@ -544,10 +601,13 @@ async def lookup_command(interaction: discord.Interaction, platform: str, game: 
     if platform == "steam":
         await handle_steam_price_query(interaction, query)
         return
+    if platform in ("ns", "ns2"):
+        await handle_nintendo_price_query(interaction, platform, query)
+        return
     links = platform_store_links(platform, query)
     await interaction.response.send_message(
         f"🎮 **{query}**｜{SUPPORTED_PLATFORMS[platform]}（台灣區參考）\n"
-        "目前只提供商店與網路價格搜尋連結，未驗證即時價格數字；請以商店頁面顯示為準。\n"
+        "目前只提供商店與網路價格搜尋連結，沒有已驗證的即時數字價格。\n"
         f"商店查詢：{links['store']}\n價格搜尋參考：{links['price_search']}",
         ephemeral=True,
     )
