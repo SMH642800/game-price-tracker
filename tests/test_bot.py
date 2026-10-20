@@ -296,6 +296,8 @@ class WatchlistUpdateTests(unittest.TestCase):
         self.assertEqual(put.call_count, 2)
         sleep.assert_called_once()
 
+class NintendoCommandTests(unittest.IsolatedAsyncioTestCase):
+
     async def test_remove_unified_nintendo_platform_removes_ns2_row_and_cleans_state(self):
         interaction = AsyncMock()
         interaction.user.id = 123
@@ -323,7 +325,6 @@ class WatchlistUpdateTests(unittest.TestCase):
         message = interaction.followup.send.await_args.args[0]
         self.assertIn("已清除 1 筆通知狀態", message)
 
-class NintendoCommandTests(unittest.IsolatedAsyncioTestCase):
     async def test_nintendo_autocomplete_returns_catalogue_ids_not_raw_query(self):
         interaction = AsyncMock()
         interaction.namespace.platform = "ns"
