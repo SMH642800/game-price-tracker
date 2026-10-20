@@ -6,6 +6,7 @@ from pathlib import Path
 from datetime import datetime, timezone, timedelta
 import requests
 import steam
+import nintendo
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -34,6 +35,55 @@ def get_steam_price(app_id, region="TW"):
         print(f"No usable price available: {app_id}")
         return None
     return game
+
+
+def is_nintendo_digital(config):
+    """Whether a watch-list row is an eligible Nintendo digital product."""
+    platform = str(config.get("platform", "")).lower()
+    store = str(config.get("store") or platform).lower()
+    price_mode = str(config.get("price_mode") or "digital").lower()
+    product_id = str(config.get("product_id", config.get("app_id", ""))).strip()
+    return (
+        platform in {"nintendo", "ns", "ns2"}
+        and store in {"nintendo_eshop", "nintendo"}
+        and price_mode == "digital"
+        and product_id.isdigit()
+    )
+
+
+def get_nintendo_price(config):
+    """Return a verified Taiwan Nintendo eShop price for a tracked digital title."""
+    product_id = str(config.get("product_id", config.get("app_id", ""))).strip()
+    region = str(config.get("region") or "TW").upper()
+    if region != "TW":
+        raise ValueError(
+            "Scheduled Nintendo notifications currently require region TW and currency TWD"
+        )
+
+    result = nintendo.get_nintendo_digital_price(
+        product_id,
+        country="TW",
+        lang="zh",
+    )
+    if result is None:
+        return None
+
+    normalized = dict(result)
+    normalized["name"] = str(config.get("name") or f"Nintendo title {product_id}")
+    regular = normalized.get("regular_price")
+    current = normalized.get("current_price")
+    if (
+        normalized.get("available")
+        and regular is not None
+        and current is not None
+        and normalized.get("currency") == "TWD"
+        and regular > 0
+        and current < regular
+    ):
+        normalized["discount"] = max(1, round((regular - current) / regular * 100))
+    else:
+        normalized["discount"] = 0
+    return normalized
 
 
 def send_discord_message(message):
@@ -156,64 +206,131 @@ def main():
     active_keys = {
         product_state_key(game)
         for game in games
-        if str(game.get("platform", "steam")).lower() == "steam"
-        and (game.get("product_id") or game.get("app_id"))
+        if (
+            (
+                str(game.get("platform", "steam")).lower() == "steam"
+                and (game.get("product_id") or game.get("app_id"))
+            )
+            or is_nintendo_digital(game)
+        )
     }
+    managed_state_prefixes = (
+        "steam:steam:",
+        "nintendo:nintendo_eshop:",
+        "nintendo:nintendo:",
+        "ns:nintendo_eshop:",
+        "ns:nintendo:",
+        "ns2:nintendo_eshop:",
+        "ns2:nintendo:",
+    )
     for key in list(notification_state):
-        if key.startswith("steam:steam:") and key not in active_keys:
+        if key.startswith(managed_state_prefixes) and key not in active_keys:
             notification_state.pop(key, None)
             print(f"Removed stale notification state: {key}")
 
     failures = []
     for config in games:
         platform = str(config.get("platform", "steam")).lower()
-        if platform != "steam":
-            # Discord lookup supports Nintendo digital prices, but the scheduled
-            # discount-notification provider is still Steam-only. Never send a
-            # Nintendo NSUID to the Steam API or fail the scheduled run.
+        if platform != "steam" and not is_nintendo_digital(config):
             print(
                 f"Skipped scheduled price check: {config.get('name', 'unknown game')} "
-                f"({platform}); scheduled notifications currently support Steam only"
+                f"({platform}); this product has no supported automatic price provider"
             )
             continue
 
         try:
             state_key = product_state_key(config)
-            app_id = str(config.get("product_id", config.get("app_id"))).strip()
-            region = str(config.get("region") or "TW").upper()
-            game = get_steam_price(app_id, region)
-            if game is None:
-                failures.append(f"No usable price data for Steam App ID {app_id}")
-                print(f"WARNING: No usable price data for Steam App ID {app_id}")
-                continue
+            if platform == "steam":
+                product_id = str(config.get("product_id", config.get("app_id"))).strip()
+                region = str(config.get("region") or "TW").upper()
+                game = get_steam_price(product_id, region)
+                if game is None:
+                    failures.append(f"No usable price data for Steam App ID {product_id}")
+                    print(f"WARNING: No usable price data for Steam App ID {product_id}")
+                    continue
 
-            if game["discount"] <= 0:
-                notification_state.pop(state_key, None)
-                print(f"No discount: {game['name']}")
-                continue
+                if game["discount"] <= 0:
+                    notification_state.pop(state_key, None)
+                    print(f"No discount: {game['name']}")
+                    continue
 
-            current_deal = {"discount": game["discount"], "final_price": game["final_price"]}
+                current_deal = {
+                    "discount": game["discount"],
+                    "final_price": game["final_price"],
+                }
+                message = (
+                    f"🎮 **Steam 特價通知：{game['name']}**\n"
+                    f"目前價格：{game['currency']} {game['final_price']:.2f}\n"
+                    f"原價：{game['currency']} {game['initial_price']:.2f}\n"
+                    f"折扣：{game['discount']}%\n"
+                    f"截止時間：{format_taiwan_datetime(game.get('discount_expiration'))}（台灣時間）\n"
+                    f"剩餘時間：{format_time_remaining(game.get('discount_expiration'))}\n"
+                    f"{game['url']}"
+                )
+            else:
+                game = get_nintendo_price(config)
+                product_id = str(config.get("product_id", config.get("app_id"))).strip()
+                if game is None:
+                    failure = f"No usable Taiwan Nintendo price data for NSUID {product_id}"
+                    failures.append(failure)
+                    print(f"WARNING: {failure}")
+                    continue
+
+                if not game.get("available"):
+                    notification_state.pop(state_key, None)
+                    print(f"Not currently for sale: {game['name']}")
+                    continue
+
+                if (
+                    game.get("currency") != "TWD"
+                    or game.get("regular_price") is None
+                    or game.get("current_price") is None
+                ):
+                    failure = f"Unverified Taiwan Nintendo price data for NSUID {product_id}"
+                    failures.append(failure)
+                    print(f"WARNING: {failure}")
+                    continue
+
+                if game["discount"] <= 0:
+                    notification_state.pop(state_key, None)
+                    print(f"No discount: {game['name']}")
+                    continue
+
+                current_deal = {
+                    "discount": game["discount"],
+                    "final_price": game["current_price"],
+                }
+                message = (
+                    f"🎮 **Nintendo Switch 特價通知：{game['name']}**\n"
+                    f"目前價格：TWD {game['current_price']:,.0f}\n"
+                    f"原價：TWD {game['regular_price']:,.0f}\n"
+                    f"折扣：約 {game['discount']}%\n"
+                    f"截止時間：Nintendo 商店未提供\n"
+                    f"{game['url']}"
+                )
+
             if notification_state.get(state_key) == current_deal:
                 print(f"Already notified: {game['name']}")
                 continue
 
-            message = (
-                f"🎮 **Steam 特價通知：{game['name']}**\n"
-                f"目前價格：{game['currency']} {game['final_price']:.2f}\n"
-                f"原價：{game['currency']} {game['initial_price']:.2f}\n"
-                f"折扣：{game['discount']}%\n"
-                f"截止時間：{format_taiwan_datetime(game.get('discount_expiration'))}（台灣時間）\n"
-                f"剩餘時間：{format_time_remaining(game.get('discount_expiration'))}\n"
-                f"{game['url']}"
-            )
             send_discord_message(message)
             notification_state[state_key] = current_deal
             save_notification_state(notification_state)
             print(f"Notification sent: {game['name']}")
-        except (requests.RequestException, ValueError, KeyError, TypeError, AttributeError, RuntimeError) as error:
+        except (
+            requests.RequestException,
+            ValueError,
+            KeyError,
+            TypeError,
+            AttributeError,
+            RuntimeError,
+        ) as error:
             failure = f"{config.get('name', 'unknown game')}: {type(error).__name__}: {error}"
             failures.append(failure)
-            print(f"ERROR: Failed to check {config.get('name', 'unknown game')}: {type(error).__name__}: {error}")
+            print(
+                f"ERROR: Failed to check {config.get('name', 'unknown game')}: "
+                f"{type(error).__name__}: {error}"
+            )
 
     # Persist successes even if another game failed, preventing duplicate notifications next run.
     save_notification_state(notification_state)
