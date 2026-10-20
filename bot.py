@@ -204,8 +204,13 @@ async def list_games(interaction: discord.Interaction):
     try:
         games = await asyncio.to_thread(load_github_watchlist)
         lines = [f"🎮 **遊戲追蹤清單**（共 {len(games)} 款）"]
-        for platform, platform_name in SUPPORTED_PLATFORMS.items():
-            platform_games = [item for item in games if platform_of(item) == platform]
+        platform_groups = [
+            ("steam", "Steam", {"steam"}),
+            ("ps5", "PlayStation 5（手動追蹤項目）", {"ps5"}),
+            ("nintendo", "Nintendo Switch／Switch 2", {"ns", "ns2", "nintendo"}),
+        ]
+        for platform, platform_name, platform_ids in platform_groups:
+            platform_games = [item for item in games if platform_of(item) in platform_ids]
             if not platform_games:
                 continue
             lines.append("")
