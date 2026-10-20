@@ -9,6 +9,7 @@ been reviewed.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import math
 from typing import Any
 
 import requests
@@ -27,7 +28,9 @@ def _price_amount(value: Any) -> float | None:
         return None
     raw = value.get("raw_value")
     if isinstance(raw, (int, float)) and not isinstance(raw, bool):
-        return float(raw)
+        amount = float(raw)
+        if math.isfinite(amount) and amount >= 0:
+            return amount
     return None
 
 
@@ -87,15 +90,30 @@ def get_nintendo_digital_price(
     discount = record.get("discount_price")
     regular_amount = _price_amount(regular)
     discount_amount = _price_amount(discount)
-    currency = None
-    for candidate in (discount, regular):
-        if isinstance(candidate, dict) and candidate.get("currency"):
-            currency = str(candidate["currency"])
-            break
+    regular_currency = (
+        str(regular.get("currency")).strip().upper()
+        if isinstance(regular, dict) and regular.get("currency") else None
+    )
+    discount_currency = (
+        str(discount.get("currency")).strip().upper()
+        if isinstance(discount, dict) and discount.get("currency") else None
+    )
+    selected_amount = discount_amount if discount_amount is not None else regular_amount
+    currency = discount_currency if discount_amount is not None else regular_currency
+
+    # Do not infer currency from the requested region. An undocumented endpoint
+    # returning a number without a currency (or a different region's currency)
+    # is not enough evidence to present a verified regional price.
+    expected_currency = {"TW": "TWD", "JP": "JPY"}[country]
+    currencies_conflict = (
+        regular_currency is not None
+        and discount_currency is not None
+        and regular_currency != discount_currency
+    )
+    currency_verified = currency == expected_currency and not currencies_conflict
 
     # Only these known positive statuses count as currently purchasable.
     available = sales_status in {"onsale", "on_sale", "preorder", "pre_order"}
-    selected_amount = discount_amount if discount_amount is not None else regular_amount
     return {
         "provider": "Nintendo eShop price API (undocumented)",
         "title_id": title_id,
@@ -105,7 +123,7 @@ def get_nintendo_digital_price(
         "available": available,
         "regular_price": regular_amount,
         "discount_price": discount_amount,
-        "current_price": selected_amount if available else None,
+        "current_price": selected_amount if available and currency_verified else None,
         "retrieved_at": datetime.now(timezone.utc).isoformat(),
         "url": (
             f"https://ec.nintendo.com/{country}/"
