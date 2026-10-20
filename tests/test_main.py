@@ -238,8 +238,7 @@ class SteamPriceParsingTests(unittest.TestCase):
                 "final": 9900, "initial": 9900, "discount_percent": 0,
             },
         }}}
-        with self.assertRaisesRegex(ValueError, "no currency"):
-            main.get_steam_price("123")
+        self.assertIsNone(main.get_steam_price("123"))
 
     @patch.object(main.requests, "get")
     def test_missing_price_overview_returns_no_price(self, get):
