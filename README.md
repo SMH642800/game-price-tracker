@@ -27,7 +27,10 @@ Each entry identifies a platform-specific product:
 }
 ```
 
-Historical-price limitation: Steam App Details provides current price, not a complete historical price series. This project records prices from the first successful scheduled check onward. `/history` also links to the matching [SteamDB app page](https://steamdb.info/) so users can inspect SteamDB's historical-price information directly.
+Historical-price policy: this project separates prices observed directly by the Bot from historical information published by external price-tracking websites. The Bot must not label third-party estimates as its own observations, silently combine the two datasets, or invent missing historical values.
+
+- **Steam:** Steam App Details provides current price, not a complete historical price series. This project records prices from the first successful scheduled check onward. `/history` links to the matching [SteamDB app page](https://steamdb.info/) for broader historical context.
+- **PS5 and Nintendo Switch 2:** if platform support is added, historical-price context will come from suitable external reference websites rather than an assumed complete local history. A source must be checked for the correct game/version and region before its link or data is presented. These platforms remain disabled for automated store search and price checking until a reliable Taiwan-region current-price source is verified.
 
 SteamDB research note: its [FAQ](https://steamdb.info/faq/) does not offer a generally available public API for this use and disallows unapproved automated scraping. Therefore this project links to SteamDB instead of scraping or importing its data. Direct historical-data import should only be considered if SteamDB provides explicit permission or a supported access method. Do not present SteamDB values as locally verified samples or silently mix them with this Bot's observations.
 
