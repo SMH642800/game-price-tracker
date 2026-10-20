@@ -35,7 +35,7 @@ class NintendoSourceProbeTests(unittest.TestCase):
         }
         session.get.side_effect = [first, second_response]
 
-        rows, summary = probe.load_catalogue(session)
+        rows, summary = probe.load_catalogue(session, cache_path=None)
 
         self.assertEqual([row["title"] for row in rows], ["Game A", "Game B"])
         self.assertEqual(summary["pages_requested"], 2)
