@@ -293,7 +293,7 @@ class NintendoCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("TWD 1,880", message)
         self.assertIn("預購中", message)
         self.assertIn("台灣數位版", message)
-        self.assertIn("目錄未標註平台世代", message)
+        self.assertNotIn("目錄未標註平台世代", message)
         self.assertIn("70010000130795", message)
 
     async def test_nintendo_lookup_does_not_invent_price_for_missing_record(self):
