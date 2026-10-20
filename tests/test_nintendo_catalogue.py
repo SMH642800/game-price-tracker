@@ -97,6 +97,46 @@ class NintendoCatalogueSearchTests(unittest.TestCase):
         self.assertEqual(entry["platform"], "nintendo")
         self.assertEqual(catalogue.get_nintendo_game_by_id("70010000128495", "ns2", rows=[])["product_id"], "70010000128495")
 
+    def test_hk_catalogue_supplements_search_after_tw_and_tw_wins_duplicate_ids(self):
+        tw_rows = [
+            {"title": "Example Taiwan title", "nsuid": "70010000000011", "platform": "Nintendo Switch"},
+        ]
+        hk_rows = [
+            {"title": "Example conflicting HK title", "nsuid": "70010000000011", "platform": "Nintendo Switch", "catalogue_source": "HK"},
+            {"title": "Example HK-only edition", "nsuid": "70010000000012", "platform": "Nintendo Switch 2", "catalogue_source": "HK"},
+        ]
+        result = catalogue.search_nintendo_games(
+            "Example", "nintendo", rows=tw_rows, hk_rows=hk_rows,
+        )
+        self.assertEqual([item["product_id"] for item in result], [
+            "70010000000011", "70010000000012",
+        ])
+        self.assertEqual(result[0]["name"], "Example Taiwan title")
+        self.assertEqual(result[1]["name"], "Example HK-only edition")
+
+    def test_lookup_by_id_falls_back_to_hk_when_tw_has_no_match(self):
+        hk_rows = [
+            {"title": "HK-only edition", "nsuid": "70010000000013", "platform": "Nintendo Switch", "catalogue_source": "HK"},
+        ]
+        entry = catalogue.get_nintendo_game_by_id(
+            "70010000000013", "nintendo", rows=[], hk_rows=hk_rows,
+        )
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry["name"], "HK-only edition")
+        self.assertEqual(entry["product_id"], "70010000000013")
+
+    def test_lookup_by_id_prefers_tw_over_hk_for_duplicate_id(self):
+        tw_rows = [
+            {"title": "Taiwan title", "nsuid": "70010000000014", "platform": "Nintendo Switch"},
+        ]
+        hk_rows = [
+            {"title": "Hong Kong title", "nsuid": "70010000000014", "platform": "Nintendo Switch", "catalogue_source": "HK"},
+        ]
+        entry = catalogue.get_nintendo_game_by_id(
+            "70010000000014", "nintendo", rows=tw_rows, hk_rows=hk_rows,
+        )
+        self.assertEqual(entry["name"], "Taiwan title")
+
     def test_curated_entry_deduplicates_if_bulk_catalogue_later_adds_same_id(self):
         rows = [{
             "title": "空之軌跡 the 2nd",
