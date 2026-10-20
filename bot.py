@@ -3,7 +3,6 @@ import base64
 import json
 import os
 import time
-from urllib.parse import quote_plus
 
 import discord
 import requests
@@ -576,14 +575,14 @@ async def help_command(interaction: discord.Interaction):
         "**一般指令**\n"
         "• `/ping` — 測試 Bot 是否正常運作\n"
         "• `/list` — 查看目前追蹤的遊戲（依平台分組）\n"
-        "• `/lookup platform game` — 統一查詢遊戲價格；Steam／Nintendo 數位版依平台回傳資料，PS5 提供搜尋連結\n"
+        "• `/lookup platform game` — 統一查詢遊戲價格；查詢 Steam 台灣現價或 Nintendo Switch／Switch 2 數位版價格\n"
         "• `/help` — 顯示使用說明\n\n"
         "**管理員限定指令**\n"
         "• `/admincheck` — 檢查管理員權限\n"
         "• `/add platform game` — 先選平台，再搜尋遊戲\n"
         "• `/remove platform game` — 依平台移除追蹤遊戲\n\n"
-        "📌 /lookup 是統一查價入口：Steam 回傳台灣現價；NS／NS2 以目錄項目及 NSUID 查台灣數位版價格；PS5 提供商店／價格搜尋連結。\n"
-        "📌 Nintendo 數位價格介面未公開文件化；不代表實體版價格。PS5 尚無已驗證的即時價格來源。\n"
+        "📌 /lookup 是統一查價入口：Steam 回傳台灣現價；NS／NS2 以目錄項目及 NSUID 查台灣數位版價格。PS5 不提供 Bot 自動搜尋或查價，既有手動追蹤項目仍可在清單中查看。\n"
+        "📌 Nintendo 數位價格介面未公開文件化；不代表實體版價格。\n"
         "📌 遊戲清單儲存在 GitHub，供自動查價流程使用。"
     )
     await interaction.response.send_message(message, ephemeral=True)
