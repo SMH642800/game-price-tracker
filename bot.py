@@ -232,7 +232,7 @@ async def platform_autocomplete(interaction, current):
             results = await asyncio.to_thread(search_nintendo_games, current.strip(), platform)
             return [
                 app_commands.Choice(
-                    name=f"{item['name']}｜{SUPPORTED_PLATFORMS[platform]}｜數位版"[:100],
+                    name=f"{item['name']}｜{SUPPORTED_PLATFORMS[platform]}｜{'平台未標註' if not item['platform_verified'] else '數位版'}"[:100],
                     value=item["product_id"],
                 )
                 for item in results[:25]
@@ -377,14 +377,17 @@ async def add_game(interaction: discord.Interaction, platform: str, game: str):
                     "name": entry["name"],
                     "edition": "digital",
                     "price_mode": "digital",
+                    "catalogue_platform_verified": entry["platform_verified"],
                 })
                 return games, True
 
             added = await asyncio.to_thread(update_github_watchlist, add_nintendo_mutation)
             status = "已新增到追蹤清單" if added else "已在追蹤清單中"
+            verification_note = "" if entry["platform_verified"] else "\\n⚠️ Nintendo 目錄未標註平台世代，請先確認商品是否屬於所選平台。"
             await interaction.followup.send(
                 f"✅ {entry['name']}（{SUPPORTED_PLATFORMS[platform]}／台灣數位版，NSUID：{product_id}）{status}。\\n"
-                "實體版價格不包含在內；Nintendo 數位價格介面尚未公開文件化。",
+                "實體版價格不包含在內；Nintendo 數位價格介面尚未公開文件化。"
+                f"{verification_note}",
                 ephemeral=True,
             )
         except (requests.RequestException, NintendoCatalogueError, ValueError, KeyError, TypeError, RuntimeError) as error:
@@ -574,6 +577,8 @@ async def handle_nintendo_price_query(interaction: discord.Interaction, platform
                 f"{result['url']}\n"
                 "注意：這是數位版價格，不代表實體卡帶／零售商價格。"
             )
+        if not entry["platform_verified"]:
+            message += "\\n⚠️ Nintendo 目錄未標註平台世代；價格紀錄對應此 NSUID，但請先確認商品版本。"
         await interaction.followup.send(message, ephemeral=True)
     except (requests.RequestException, NintendoCatalogueError, nintendo.NintendoPriceError,
             ValueError, KeyError, TypeError, AttributeError, RuntimeError) as error:
