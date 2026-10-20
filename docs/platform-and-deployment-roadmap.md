@@ -4,83 +4,79 @@ Status: design requirements; not all capabilities are implemented.
 
 ## Delivery approach
 
-**Develop and test locally first; deploy to the cloud only after the feature set is complete and validated.** Do not start a cloud migration, add hosting costs, or introduce deployment complexity just to continue feature development.
+**Develop and test locally first; deploy to the cloud only after the feature set is complete and validated.** The current workflow should remain convenient for local development. Do not start a cloud migration, add hosting costs, or introduce deployment complexity just to continue feature development.
 
-The later goal is for the Discord bot and scheduled checks to keep working when the user's personal computer is turned off. Build portability and persistence boundaries now, but keep local development and testing as the active workflow until the user decides the feature set is ready.
+Cloud deployment is a later release stage: the goal is for the Discord bot and scheduled price checks to keep working when the user's personal computer is turned off. Build portability and persistence boundaries now so this later move is straightforward, but keep using local execution for development and tests until the user is ready to deploy.
 
-## Product scope
+## Product requirements
 
-- Automated interactive lookup currently covers Steam, Nintendo Switch (NS), and Nintendo Switch 2 (NS2).
-- PS5 automated search and lookup are out of scope. Existing manually maintained PS5 watchlist rows may remain visible and removable, but must not be treated as verified price products or automatically queried.
-- Scheduled discount notifications are Steam-only. Other platforms are skipped unless a provider and notification policy are explicitly implemented and tested.
-- NS and NS2 are separate platform targets. A title may have an NS release, a native NS2 release, an NS2 Edition, or an upgrade path. Title matching alone must never merge these products.
-- Keep digital storefront prices separate from physical retailer prices. Store region, currency, source, edition/product ID, and retrieval timestamp with every numeric offer.
-- The product focuses on current-price lookup and discount notifications. Historical price collection, historical-price commands, and price-trend charts are out of scope.
-- Never present an unverified source or inferred price as a directly observed current price.
+- Automate current-price lookup for Steam, Nintendo Switch (NS), and Nintendo Switch 2 (NS2). PS5 lookup is out of scope for the current bot; a manually maintained PS5 watchlist row may be retained for reference/removal, but must not be presented as automatically price-checked.
+- Treat NS and NS2 as distinct platform targets. A title may have an NS release, an NS2 release, an NS2 Edition, an upgrade path, or only some of these. Keep product/edition identity explicit; title matching alone must never merge records.
+- Keep digital storefront prices separate from physical retailer prices. Store region, currency, source, edition/product ID, and availability status with every current offer.
+- The product's focus is current price checks and discount notifications. Historical price collection, historical-price commands, and price-trend charts are out of scope.
+- Preserve the existing rule that unverified sources and inferred prices must not be presented as directly observed bot prices.
+- Final cloud operation must not require a user's Mac or other personal computer to be powered on.
 
 ## Architecture constraints
 
-### Platform-neutral product identity
+### Platform-neutral domain model
 
-Keep platform and provider IDs namespaced; do not assume one global ID or that one title equals one purchasable product. The data model may remain extensible for future platforms without exposing automated lookup for a platform that is currently out of scope.
+Use shared concepts for games, platform releases/editions, current store offers, watchlist entries, and notification rules. Provider-specific IDs must be namespaced by provider/platform/region; do not assume one global ID or one title equals one purchasable product.
 
 A current offer should be traceable to at least:
-- platform and exact release/edition;
+- platform and edition/release;
 - store or retailer and digital/physical channel;
 - product identifier from the source;
-- region and source-reported currency;
-- current price and discount/availability status where provided;
-- source/provider URL and retrieval timestamp;
-- any data-quality caveat or verification status.
+- region and currency;
+- current price and discount status where available;
+- source URL/provider and retrieval timestamp;
+- availability/status and any data-quality caveat.
 
-NS, NS2, and NS2 Edition should not automatically be treated as equivalent. Record upgrade relationships only when a source confirms them. Missing platform metadata must remain explicitly unverified.
+NS2 Edition should not automatically be treated as equivalent to a native NS2 release or the NS version. Explicitly represent upgrade eligibility/relationships only when a source confirms them.
 
 ### Provider adapters
 
-Keep catalogue search and current-price retrieval separate: a catalogue result identifies a candidate product; a price adapter retrieves an offer for that product. Keep provider-specific HTTP parsing outside Discord command handlers and notification orchestration.
+Keep catalogue search and current-price retrieval separate: a catalogue result identifies the exact product; a price adapter retrieves offers for that product. Provider outages, missing IDs, rate limits, malformed responses, and uncertain regional availability must fail closed rather than fabricate a price or silently switch regions.
 
-Provider outages, missing IDs, rate limits, malformed responses, missing currency, and uncertain regional availability must fail closed rather than fabricate a price or silently switch regions. Provider adapters should have mocked tests and a documented source/licensing/rate-limit review before production use.
-
-Nintendo's current candidate endpoints are undocumented and automated reuse permission is unconfirmed. The code path is experimental, not source approval. Do not enable scheduled Nintendo price notifications from this adapter. Physical NS/NS2 prices need a separately reviewed retailer source.
+Use a provider interface so platform-specific source changes do not spread into Discord commands or persistence logic. Every provider must have mocked tests and documented source/licensing/rate-limit review before production use. Nintendo's currently probed endpoints remain undocumented and unapproved; do not treat the probe as permission for scheduled reuse. Physical NS/NS2 prices need a separately approved retailer source.
 
 ### Local development now
 
 - Keep feature development, manual smoke tests, and regression tests runnable on the developer's computer.
 - Load secrets from local environment/configuration for local runs; never commit tokens or webhook URLs.
-- Avoid hard-coded machine-specific absolute paths or treating a local cache as authoritative production data.
-- Keep persistence behind a small boundary where practical, so local storage can later be replaced by durable cloud-capable storage without rewriting commands and provider logic.
-- Keep tests deterministic with mocked network/provider responses. Live endpoint checks are explicit manual tests, not a requirement for the normal test suite.
-- Document required local cache setup and fail clearly when a required cache is missing or stale.
+- Avoid hard-coded local absolute paths, implicit dependence on a particular machine, or treating local cache files as authoritative production data.
+- Keep persistence behind a small interface where practical, so local development storage can later be replaced by a durable cloud-capable backend without rewriting commands and price-provider logic.
+- Keep tests deterministic with mocked network/provider responses. Live endpoint checks should remain explicit manual tests, not a requirement for the normal test suite.
 
 ### Cloud deployment later
 
-- Do not migrate hosting before the user decides the feature set is ready.
-- At deployment time, choose a managed scheduler/worker or suitable host so scheduled checks and any required persistent Discord connection can run while the personal computer is off.
+- Do not migrate hosting before the user decides the feature set is ready. Cloud deployment is a planned release step, not a prerequisite for current development.
+- At deployment time, choose a managed scheduler/worker or other suitable hosting so scheduled checks and any required persistent Discord connection can run while the personal computer is off.
 - Treat GitHub Actions runners as ephemeral; files written only to a runner are not reliable long-term storage.
-- Store watchlists and notification/deduplication state in a durable shared store or version-controlled persistence layer with concurrency protection. If repository JSON remains the interim store, document its limits and preserve conflict handling.
+- Store watchlists and notification/deduplication state in a durable shared store or a version-controlled persistence layer with concurrency protection. If repository JSON remains the interim store, document its limits and preserve conflict retries.
 - Keep secrets in the deployment platform's secret manager/repository secrets; never commit tokens or webhook URLs.
-- Make scheduled runs idempotent and safe to retry. Persist notification state so a retry is unlikely to send duplicate alerts; document the unavoidable boundary between sending an external message and persisting local state.
+- Make scheduled runs idempotent and safe to retry. Persist notification state so a retry does not send duplicate alerts.
 - Add timeouts, bounded retries/backoff for transient failures, provider-level rate limits, structured logs, and failure alerts/health checks.
-- Make timezone and schedule explicit. The current GitHub Actions schedule is 12:06 UTC (20:06 Taiwan time); confirm the desired cadence before changing it.
-- Validate cloud operation with the developer's computer off, monitor failures, test recovery from interrupted runs, and verify duplicate-notification behaviour.
+- Make timezone and schedule explicit. The current GitHub Actions schedule is 12:06 UTC (20:06 Taiwan time); confirm desired cadence before changing it.
+- Validate cloud operation with the developer's computer off, monitor failures, test recovery from interrupted runs, and verify no duplicate notifications.
 
 ## Suggested staged delivery
 
-1. **Now — local reliability:** complete Discord commands, watchlist mutation, Steam current-price lookup, and Steam discount notifications. Keep regression tests runnable locally.
-2. **Provider boundaries:** keep search, catalogue matching, price normalization, and persistence separate from Discord handlers. Add tests for duplicate titles, editions, regions, currency, missing IDs, and physical-versus-digital offers.
-3. **Source approval:** review official documentation/terms, attribution, rate limits, caching, and permitted use before relying on each provider. Keep Nintendo numeric lookup clearly experimental until that review is complete.
-4. **Pre-deployment hardening:** test persistence boundaries, retries, state migration/export, notification deduplication, secrets configuration, and fresh-process startup.
+1. **Now — finish local development:** implement and test Discord commands, watchlists, source adapters, current-price lookup, and discount-notification behaviour locally. Keep unsupported console prices link-only.
+2. **Next — catalogue and offer contracts:** define provider interfaces and normalized models; add NS and NS2 as distinct platform values; test duplicate titles, editions, upgrades, regions, and physical-vs-digital offers.
+3. **Then — source approval and integration:** approve a source for each platform/channel before enabling numeric pricing. Keep each source's terms, API documentation, rate limits, attribution, and live smoke-test results in the source audit.
+4. **Pre-deployment hardening:** test persistence boundaries, retries, state migration/export, notification idempotency, secrets configuration, and fresh-process startup.
 5. **When features are ready — cloud migration:** select hosting and durable storage, deploy, verify schedules and alerts with the personal computer off, and keep a rollback path.
 
 ## Acceptance criteria
 
-- Steam, NS, and NS2 products can be selected independently where supported by the current lookup flow; PS5 is not exposed as an automated lookup platform.
+- A single title can be tracked independently on Steam, PS5, NS, and NS2 where matching releases exist.
 - NS, NS2, and NS2 Edition offers are not conflated; physical and digital prices are distinct.
-- Every displayed numeric price has an explicit source product, edition/platform verification status, region, source-reported currency, and retrieval time where the provider exposes it.
-- The bot supports current-price lookup and discount notifications; historical-price collection and query features are not required.
-- Scheduled price checks query Steam only and skip non-Steam rows without treating them as Steam IDs.
-- Normal development and regression tests run locally before cloud migration and do not depend on live third-party services.
-- A later cloud deployment can run scheduled collection and send Discord alerts without the user's computer being on.
-- A cold start can load durable state and complete safely.
-- Retried or overlapping scheduled jobs do not corrupt watchlists; notification idempotency limitations are documented and tested.
+- Every numeric current price is linked to a specific source product, edition, region, currency, and retrieval time.
+- The bot checks current prices and sends discount notifications according to configured rules; historical-price collection and query features are not required.
+- Normal development and regression tests continue to run locally before cloud migration.
+- The later cloud deployment can run scheduled collection and send Discord alerts without the user's computer being on.
+- A cold start on a fresh deployment can load durable state and complete safely.
+- Retried or overlapping scheduled jobs do not corrupt watchlists or send duplicate notifications.
+- CI uses mocked provider responses and does not depend on live third-party services.
 - Unsupported or unverified prices remain explicitly unavailable rather than guessed.
