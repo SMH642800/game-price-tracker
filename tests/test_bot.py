@@ -83,11 +83,11 @@ class WatchlistUpdateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "JSON object"):
             bot.search_steam_games("Example")
 
-    def test_add_and_lookup_choices_exclude_ps5_but_remove_keeps_manual_ps5_entries(self):
+    def test_ps5_is_not_offered_in_add_lookup_or_remove_choices(self):
         add_lookup = {choice.value for choice in bot.ADD_LOOKUP_PLATFORM_CHOICES}
         remove = {choice.value for choice in bot.REMOVE_PLATFORM_CHOICES}
         self.assertEqual(add_lookup, {"steam", "nintendo"})
-        self.assertIn("ps5", remove)
+        self.assertEqual(remove, {"steam", "nintendo"})
         self.assertEqual(bot.SUPPORTED_PLATFORMS["ps5"], "PlayStation 5")
 
     def test_nintendo_lookup_uses_one_unified_platform_choice(self):
