@@ -404,6 +404,7 @@ async def handle_steam_price_query(interaction: discord.Interaction, product_id:
                 f"目前價格：**{result['currency']} {result['final_price']:.2f}**\n"
                 f"原價：{result['currency']} {result['initial_price']:.2f}\n"
                 f"折扣：**{result['discount']}%**\n"
+                f"查詢時間（UTC）：{result['retrieved_at']}\n"
                 f"{result['url']}"
             )
         await interaction.followup.send(message, ephemeral=True)
