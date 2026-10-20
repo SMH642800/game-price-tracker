@@ -200,7 +200,7 @@ class NintendoCommandTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_nintendo_lookup_does_not_invent_price_for_missing_record(self):
         interaction = AsyncMock()
-        entry = {"name": "時之笛", "product_id": "70010000012345", "platform": "ns"}
+        entry = {"name": "時之笛", "product_id": "70010000012345", "platform": "ns", "platform_verified": True}
         with patch.object(bot, "get_nintendo_game_by_id", return_value=entry), \
              patch.object(bot.nintendo, "get_nintendo_digital_price", return_value=None):
             await bot.handle_nintendo_price_query(interaction, "ns", "70010000012345")
