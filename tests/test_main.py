@@ -125,7 +125,7 @@ class NotificationStateTests(unittest.TestCase):
         send.assert_not_called()
         self.assertEqual(json.loads(self.state_path.read_text(encoding="utf-8")), {})
 
-    def test_link_only_console_entries_are_skipped_without_failing_scheduled_run(self):
+    def test_all_non_steam_entries_are_skipped_without_failing_scheduled_run(self):
         self.write_watchlist([
             {
                 "platform": "ps5", "store": "link_only", "product_id": "game a",
@@ -133,11 +133,12 @@ class NotificationStateTests(unittest.TestCase):
             },
             {
                 "platform": "ns", "store": "link_only", "product_id": "game b",
-                "region": "TW", "name": "Switch Game", "price_mode": "links_only",
+                "region": "TW", "name": "Switch Link-only Game", "price_mode": "links_only",
             },
             {
-                "platform": "ns2", "store": "link_only", "product_id": "game c",
-                "region": "TW", "name": "Switch 2 Game", "price_mode": "links_only",
+                "platform": "ns2", "store": "nintendo_eshop", "product_id": "70010000012345",
+                "region": "TW", "name": "Switch 2 Digital Game", "edition": "digital",
+                "price_mode": "digital",
             },
         ])
         with patch.object(main, "get_steam_price") as get_price, \
