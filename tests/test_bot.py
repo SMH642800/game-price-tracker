@@ -179,7 +179,7 @@ class NintendoCommandTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_nintendo_lookup_renders_digital_price_and_source_caveat(self):
         interaction = AsyncMock()
-        entry = {"name": "時之笛", "product_id": "70010000012345", "platform": "ns"}
+        entry = {"name": "時之笛", "product_id": "70010000012345", "platform": "ns", "platform_verified": True}
         price = {
             "available": True, "current_price": 1290.0, "regular_price": 1790.0,
             "discount_price": 1290.0, "currency": "TWD", "region": "TW",
