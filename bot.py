@@ -168,7 +168,10 @@ async def remove_game_autocomplete(interaction, current):
         games = await asyncio.to_thread(load_github_watchlist)
         choices = []
         for game in games:
-            if platform_of(game) != platform:
+            if platform == "nintendo":
+                if platform_of(game) not in {"ns", "ns2", "nintendo"}:
+                    continue
+            elif platform_of(game) != platform:
                 continue
             product_id = product_id_of(game)
             name = str(game.get("name", ""))
@@ -247,8 +250,7 @@ ADD_LOOKUP_PLATFORM_CHOICES = [
 REMOVE_PLATFORM_CHOICES = [
     app_commands.Choice(name="Steam", value="steam"),
     app_commands.Choice(name="PlayStation 5（手動追蹤項目）", value="ps5"),
-    app_commands.Choice(name="Nintendo Switch", value="ns"),
-    app_commands.Choice(name="Nintendo Switch 2", value="ns2"),
+    app_commands.Choice(name="Nintendo Switch／Switch 2（合併）", value="nintendo"),
 ]
 
 
@@ -362,7 +364,7 @@ async def remove_game(interaction: discord.Interaction, platform: str, game: str
         def remove_mutation(games):
             removed = [
                 item for item in games
-                if platform_of(item) == platform and product_id_of(item) == product_id
+                if platform_of(item) in ({"ns", "ns2", "nintendo"} if platform == "nintendo" else {platform}) and product_id_of(item) == product_id
             ]
             if not removed:
                 return games, None
