@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import copy
 import json
 import os
 import time
@@ -85,6 +86,13 @@ def get_steam_current_price(product_id):
             "price_available": False,
             "url": f"https://store.steampowered.com/app/{product_id}/",
         }
+    currency = price.get("currency")
+    if not isinstance(currency, str) or currency.strip().upper() != "TWD":
+        return {
+            "name": data.get("name", f"Steam App {product_id}"),
+            "price_available": False,
+            "url": f"https://store.steampowered.com/app/{product_id}/",
+        }
     try:
         final_minor = int(price["final"])
         initial_minor = int(price["initial"])
@@ -97,7 +105,7 @@ def get_steam_current_price(product_id):
     return {
         "name": data.get("name", f"Steam App {product_id}"),
         "price_available": True,
-        "currency": price.get("currency") or "TWD",
+        "currency": currency.strip().upper(),
         "final_price": final_minor / 100,
         "initial_price": initial_minor / 100,
         "discount": discount,
@@ -110,7 +118,8 @@ def update_github_watchlist(mutator, retries=5):
     last_error = None
     for attempt in range(retries):
         games, sha = fetch_github_watchlist_with_sha()
-        original_games = list(games)
+        # A shallow copy misses in-place edits to nested watchlist records.
+        original_games = copy.deepcopy(games)
         updated_games, result = mutator(games)
         if updated_games == original_games:
             return result
@@ -126,7 +135,9 @@ def update_github_watchlist(mutator, retries=5):
             },
             timeout=15,
         )
-        if response.status_code in (409, 422):
+        # 409 is GitHub's explicit content conflict. A 422 can also mean
+        # invalid content or validation failure, so do not mask it as a race.
+        if response.status_code == 409:
             last_error = requests.HTTPError(
                 f"GitHub watchlist changed concurrently (HTTP {response.status_code})"
             )
