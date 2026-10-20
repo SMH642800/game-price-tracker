@@ -2,24 +2,28 @@ import json
 import re
 import os
 import sys
+import tempfile
+from pathlib import Path
 from datetime import datetime, timezone, timedelta
 import requests
 
 TAIWAN_TZ = timezone(timedelta(hours=8))
 
 WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
+STATE_PATH = Path("notification_state.json")
+WATCHLIST_PATH = Path("games_track_list.json")
 
 STEAM_API_URL = (
     "https://store.steampowered.com/api/appdetails"
 )
 
 
-def get_steam_price(app_id):
+def get_steam_price(app_id, region="TW"):
     response = requests.get(
         STEAM_API_URL,
         params={
             "appids": app_id,
-            "cc": "tw",
+            "cc": region.lower(),
             "l": "zh-tw",
         },
         timeout=20,
@@ -47,7 +51,7 @@ def get_steam_price(app_id):
         "discount": price.get("discount_percent", 0),
         "discount_expiration": (
             price.get("discount_expiration")
-            or get_steam_discount_expiration(app_id)
+            or get_steam_discount_expiration(app_id, region)
         ),
         "url": f"https://store.steampowered.com/app/{app_id}/",
     }
@@ -65,26 +69,62 @@ def send_discord_message(message):
     response.raise_for_status()
 
 
+def product_state_key(game_config):
+    platform = str(game_config.get("platform", "steam")).lower()
+    store = str(game_config.get("store") or platform).lower()
+    region = str(game_config.get("region") or "TW").upper()
+    product_id = game_config.get("product_id", game_config.get("app_id"))
+    if product_id is None or not str(product_id).strip():
+        raise ValueError("Tracked game is missing product_id/app_id")
+    return f"{platform}:{store}:{region}:{str(product_id).strip()}"
+
+
 def load_notification_state():
     try:
-        with open("notification_state.json", "r", encoding="utf-8") as file:
-            return json.load(file)
-    except (FileNotFoundError, json.JSONDecodeError):
+        with STATE_PATH.open("r", encoding="utf-8") as file:
+            state = json.load(file)
+    except FileNotFoundError:
         return {}
+    except json.JSONDecodeError as error:
+        raise RuntimeError(
+            "notification_state.json is invalid JSON; refusing to reset notification history"
+        ) from error
+    if not isinstance(state, dict):
+        raise RuntimeError("notification_state.json must contain a JSON object")
+    migrated = {}
+    for key, value in state.items():
+        if str(key).isdigit():
+            migrated[f"steam:steam:TW:{key}"] = value
+        else:
+            migrated[key] = value
+    return migrated
 
 
 def save_notification_state(state):
-    with open("notification_state.json", "w", encoding="utf-8") as file:
-        json.dump(state, file, ensure_ascii=False, indent=2)
+    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_path = tempfile.mkstemp(prefix=".notification_state.", suffix=".tmp", dir=str(STATE_PATH.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as file:
+            json.dump(state, file, ensure_ascii=False, indent=2)
+            file.write("\n")
+            file.flush()
+            os.fsync(file.fileno())
+        os.replace(temp_path, STATE_PATH)
+    except Exception:
+        try:
+            os.unlink(temp_path)
+        except FileNotFoundError:
+            pass
+        raise
 
 
-def get_steam_discount_expiration(app_id):
+def get_steam_discount_expiration(app_id, region="TW"):
     url = f"https://store.steampowered.com/app/{app_id}/"
 
     try:
         response = requests.get(
             url,
-            params={"cc": "tw", "l": "zh-tw"},
+            params={"cc": region.lower(), "l": "english"},
             headers={"User-Agent": "Mozilla/5.0"},
             timeout=20,
         )
@@ -168,116 +208,87 @@ def format_time_remaining(expiration):
 
 def main():
     notification_state = load_notification_state()
-
-    with open("games_track_list.json", "r", encoding="utf-8") as file:
+    with WATCHLIST_PATH.open("r", encoding="utf-8") as file:
         games = json.load(file)
-        print("=== Current watch list ===")
-        print(json.dumps(games, ensure_ascii=False, indent=2))
+    if not isinstance(games, list) or any(not isinstance(item, dict) for item in games):
+        raise RuntimeError("games_track_list.json must be a JSON array of objects")
 
-    # 清除已不在追蹤清單中的 Steam 遊戲通知紀錄
-    active_app_ids = {
-        str(game["app_id"])
+    print("=== Current watch list ===")
+    print(json.dumps(games, ensure_ascii=False, indent=2))
+    active_keys = {
+        product_state_key(game)
         for game in games
-        if game.get("platform") == "steam" and game.get("app_id")
+        if str(game.get("platform", "steam")).lower() == "steam"
+        and (game.get("product_id") or game.get("app_id"))
     }
+    for key in list(notification_state):
+        if key.startswith("steam:steam:TW:") and key not in active_keys:
+            notification_state.pop(key, None)
+            print(f"Removed stale notification state: {key}")
 
-    removed_app_ids = set(notification_state) - active_app_ids
-
-    for app_id in removed_app_ids:
-        notification_state.pop(app_id, None)
-        print(f"Removed stale notification state: {app_id}")
-
-    for game_config in games:
-        if game_config.get("platform") != "steam":
-            print(f"Skipping unsupported platform: {game_config.get('platform')}")
+    failures = []
+    for config in games:
+        platform = str(config.get("platform", "steam")).lower()
+        if platform != "steam":
+            failure = f"Price provider is not configured for platform '{platform}' ({config.get('name', 'unknown game')})"
+            print(f"ERROR: {failure}")
+            failures.append(failure)
             continue
-
-        app_id = str(game_config["app_id"])
 
         try:
-            game = get_steam_price(app_id)
-        except (
-            requests.RequestException,
-            ValueError,
-            KeyError,
-            TypeError,
-        ) as error:
-            print(
-                f"ERROR: Failed to check Steam App ID {app_id}: "
-                f"{type(error).__name__}: {error}"
+            state_key = product_state_key(config)
+            app_id = str(config.get("product_id", config.get("app_id"))).strip()
+            region = str(config.get("region") or "TW").upper()
+            game = get_steam_price(app_id, region)
+            if game is None:
+                failures.append(f"No usable price data for Steam App ID {app_id}")
+                print(f"WARNING: No usable price data for Steam App ID {app_id}")
+                continue
+
+            if game["discount"] <= 0:
+                notification_state.pop(state_key, None)
+                print(f"No discount: {game['name']}")
+                continue
+
+            current_deal = {"discount": game["discount"], "final_price": game["final_price"]}
+            if notification_state.get(state_key) == current_deal:
+                print(f"Already notified: {game['name']}")
+                continue
+
+            message = (
+                f"🎮 **Steam 特價通知：{game['name']}**\n"
+                f"目前價格：{game['currency']} {game['final_price']:.2f}\n"
+                f"原價：{game['currency']} {game['initial_price']:.2f}\n"
+                f"折扣：{game['discount']}%\n"
+                f"截止時間：{format_taiwan_datetime(game.get('discount_expiration'))}（台灣時間）\n"
+                f"剩餘時間：{format_time_remaining(game.get('discount_expiration'))}\n"
+                f"{game['url']}"
             )
-            continue
+            send_discord_message(message)
+            notification_state[state_key] = current_deal
+            save_notification_state(notification_state)
+            print(f"Notification sent: {game['name']}")
+        except (requests.RequestException, ValueError, KeyError, TypeError, AttributeError, RuntimeError) as error:
+            failure = f"{config.get('name', 'unknown game')}: {type(error).__name__}: {error}"
+            failures.append(failure)
+            print(f"ERROR: Failed to check {config.get('name', 'unknown game')}: {type(error).__name__}: {error}")
 
-        if game is None:
-            print(f"WARNING: No usable price data for Steam App ID {app_id}")
-            continue
-
-        # 記錄每款遊戲目前的折扣狀態
-        if game["discount"] <= 0:
-            notification_state.pop(app_id, None)
-            print(f"No discount: {game['name']}")
-            continue
-
-        # 同一價格、同一折扣只通知一次
-        current_deal = {
-            "discount": game["discount"],
-            "final_price": game["final_price"],
-        }
-
-        if notification_state.get(app_id) == current_deal:
-            print(f"Already notified: {game['name']}")
-            continue
-
-        remaining_text = format_time_remaining(
-            game.get("discount_expiration")
-        )
-
-        expiration_text = format_taiwan_datetime(
-            game.get("discount_expiration")
-        )
-
-        message = (
-            f"🎮 **Steam 特價通知：{game['name']}**\n"
-            f"目前價格：{game['currency']} {game['final_price']:.2f}\n"
-            f"原價：{game['currency']} {game['initial_price']:.2f}\n"
-            f"折扣：{game['discount']}%\n"
-            f"截止時間：{expiration_text}（台灣時間）\n"
-            f"剩餘時間：{remaining_text}\n"
-            f"{game['url']}"
-        )
-
-        # 先發送成功，再更新紀錄
-        send_discord_message(message)
-
-        notification_state[app_id] = current_deal
-        save_notification_state(notification_state)
-
-        print(f"Notification sent: {game['name']}")
-
-    # 即使沒有新通知，也保存恢復原價後清除的紀錄
+    # Persist successes even if another game failed, preventing duplicate notifications next run.
     save_notification_state(notification_state)
-
+    if failures:
+        print(f"ERROR: {len(failures)} game check(s) failed:")
+        for failure in failures:
+            print(f" - {failure}")
+        raise SystemExit(1)
 
 def test_notification():
-    state = load_notification_state()
-    test_key = "__discord_test_notification__"
-
-    if test_key in state:
-        print("Test notification already sent. Skipping.")
-        return
-
     message = (
         "🧪 **Discord 通知測試**\n"
-        "這是一則測試訊息，不代表任何 Steam 遊戲正在特價。\n"
+        "這是一則測試訊息，不代表任何遊戲正在特價。\n"
         "如果你看到這則訊息，代表 Discord Webhook 可以正常運作。"
     )
-
     send_discord_message(message)
-
-    state[test_key] = {"sent": True}
-    save_notification_state(state)
-
-    print("Test notification sent and saved.")
+    print("Test notification sent.")
 
 
 if __name__ == "__main__":

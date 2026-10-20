@@ -1,12 +1,16 @@
 [
   {
     "platform": "steam",
-    "app_id": "413150",
+    "store": "steam",
+    "product_id": "413150",
+    "region": "TW",
     "name": "Stardew Valley"
   },
   {
     "platform": "steam",
-    "app_id": "1794680",
+    "store": "steam",
+    "product_id": "1794680",
+    "region": "TW",
     "name": "Vampire Survivors"
   }
 ]

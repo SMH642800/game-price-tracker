@@ -1,0 +1,33 @@
+name: Python Tests
+
+on:
+  push:
+    branches:
+      - main
+      - reliability-multiplatform-v1
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile Python files
+        run: python -m compileall -q main.py bot.py tests
+      - name: Run regression tests
+        run: python -m unittest discover -s tests -v

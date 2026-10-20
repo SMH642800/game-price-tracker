@@ -1,4 +1,3 @@
-
 name: Game Price Tracker
 
 on:
@@ -50,26 +49,27 @@ jobs:
           fi
 
       - name: Run selected mode
+        id: run_tracker
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TRACKER_MODE: ${{ inputs.mode || 'check' }}
         run: |
-          if [ "${{ inputs.mode }}" = "test-notification" ]; then
+          if [ "$TRACKER_MODE" = "test-notification" ]; then
             python main.py --test-notification
           else
             python main.py
           fi
 
+      # Save successful per-game state updates even if another game failed.
       - name: Save notification history
-        if: success()
+        if: always() && steps.run_tracker.outcome != 'skipped'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add notification_state.json
-
           if ! git diff --cached --quiet; then
             git commit -m "Update notification history"
-
             git fetch origin main
             git rebase origin/main
             git push origin HEAD:main
@@ -94,20 +94,16 @@ jobs:
           分支：${BRANCH}
           詳細紀錄：${RUN_URL}"
 
-          PAYLOAD=$(jq -n --arg content "$MESSAGE" \
-            '{content: $content}')
-
-          curl --fail-with-body --silent --show-error \
-            --max-time 15 \
-            -H "Content-Type: application/json" \
-            -X POST \
-            -d "$PAYLOAD" \
-            "$DISCORD_WEBHOOK_URL"
+          PAYLOAD=$(jq -n --arg content "$MESSAGE" '{content: $content}')
+          curl --fail-with-body --silent --show-error             --max-time 15             -H "Content-Type: application/json"             -X POST             -d "$PAYLOAD"             "$DISCORD_WEBHOOK_URL"
 
       - name: Report successful run to Healthchecks
+        if: success()
         env:
           HEALTHCHECKS_PING_URL: ${{ secrets.HEALTHCHECKS_PING_URL }}
         run: |
-          curl --fail --silent --show-error \
-            --max-time 15 \
-            "$HEALTHCHECKS_PING_URL"
+          if [ -z "$HEALTHCHECKS_PING_URL" ]; then
+            echo "HEALTHCHECKS_PING_URL secret is not configured"
+            exit 1
+          fi
+          curl --fail --silent --show-error --max-time 15 "$HEALTHCHECKS_PING_URL"

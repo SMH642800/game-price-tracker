@@ -1,9 +1,11 @@
-
-import os
+import asyncio
+import base64
 import json
-import requests
+import os
+import time
 
 import discord
+import requests
 from discord import app_commands
 from dotenv import load_dotenv
 
@@ -15,505 +17,324 @@ GUILD_ID = os.getenv("DISCORD_GUILD_ID")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_REPO = "SMH642800/game-price-tracker"
 GITHUB_FILE_PATH = "games_track_list.json"
+GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
+SUPPORTED_PLATFORMS = {
+    "steam": "Steam",
+    "ps5": "PlayStation 5",
+    "ns2": "Nintendo Switch 2",
+}
 
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
 
-WATCHLIST_FILE = "games_track_list.json"
-
-def load_watchlist():
-    with open(WATCHLIST_FILE, "r", encoding="utf-8") as file:
-        return json.load(file)
-    
-
-def load_github_watchlist():
-    url = (
-        f"https://api.github.com/repos/"
-        f"{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
-    )
-
-    response = requests.get(
-        url,
-        headers={
-            "Authorization": f"Bearer {GITHUB_TOKEN}",
-            "Accept": "application/vnd.github+json",
-        },
-        timeout=15,
-    )
-    response.raise_for_status()
-
-    import base64
-    import json
-
-    content = base64.b64decode(
-        response.json()["content"]
-    ).decode("utf-8")
-
-    return json.loads(content)
-
-
-def save_github_watchlist(games):
-    import base64
-    import json
-
-    url = (
-        f"https://api.github.com/repos/"
-        f"{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
-    )
-    headers = {
+def github_headers():
+    if not GITHUB_TOKEN:
+        raise RuntimeError("GITHUB_TOKEN is not configured")
+    return {
         "Authorization": f"Bearer {GITHUB_TOKEN}",
         "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
     }
 
-    # 取得目前檔案的 SHA，GitHub 更新檔案時需要它
-    response = requests.get(url, headers=headers, timeout=15)
+
+def fetch_github_watchlist_with_sha():
+    response = requests.get(GITHUB_API_URL, headers=github_headers(), timeout=15)
     response.raise_for_status()
-    sha = response.json()["sha"]
-
-    content = json.dumps(
-        games,
-        ensure_ascii=False,
-        indent=2,
-    )
-
-    response = requests.put(
-        url,
-        headers=headers,
-        json={
-            "message": "Update tracked games via Discord bot",
-            "content": base64.b64encode(
-                content.encode("utf-8")
-            ).decode("ascii"),
-            "sha": sha,
-        },
-        timeout=15,
-    )
-    response.raise_for_status()
+    payload = response.json()
+    content = base64.b64decode(payload["content"]).decode("utf-8")
+    games = json.loads(content)
+    if not isinstance(games, list) or any(not isinstance(item, dict) for item in games):
+        raise ValueError("games_track_list.json must be a JSON array of objects")
+    return games, payload["sha"]
 
 
-def get_steam_game(app_id: str):
-    url = "https://store.steampowered.com/api/appdetails"
+def load_github_watchlist():
+    games, _ = fetch_github_watchlist_with_sha()
+    return games
 
+
+def update_github_watchlist(mutator, retries=5):
+    """Re-read and re-apply the mutation after SHA conflicts to avoid lost updates."""
+    last_error = None
+    for attempt in range(retries):
+        games, sha = fetch_github_watchlist_with_sha()
+        original_games = list(games)
+        updated_games, result = mutator(games)
+        if updated_games == original_games:
+            return result
+
+        content = json.dumps(updated_games, ensure_ascii=False, indent=2) + "\n"
+        response = requests.put(
+            GITHUB_API_URL,
+            headers=github_headers(),
+            json={
+                "message": "Update tracked games via Discord bot",
+                "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
+                "sha": sha,
+            },
+            timeout=15,
+        )
+        if response.status_code in (409, 422):
+            last_error = requests.HTTPError(
+                f"GitHub watchlist changed concurrently (HTTP {response.status_code})"
+            )
+            time.sleep(0.2 * (attempt + 1))
+            continue
+        response.raise_for_status()
+        return result
+    raise RuntimeError("Could not update watchlist after concurrent changes") from last_error
+
+
+def search_steam_games(query):
     response = requests.get(
-        url,
-        params={
-            "appids": app_id,
-            "l": "english",
-        },
+        "https://store.steampowered.com/api/storesearch/",
+        params={"term": query, "l": "tchinese", "cc": "tw"},
         timeout=15,
     )
     response.raise_for_status()
-
-    result = response.json().get(app_id, {})
-
-    if not result.get("success"):
-        return None
-
-    data = result.get("data", {})
-    if not data.get("name"):
-        return None
-
-    return data["name"]
-
-
-def search_steam_games(query: str):
-    url = "https://store.steampowered.com/api/storesearch/"
-
-    response = requests.get(
-        url,
-        params={
-            "term": query,
-            "l": "tchinese",
-            "cc": "tw",
-        },
-        timeout=15,
-    )
-    response.raise_for_status()
-
     data = response.json()
     results = []
-
-    for game in data.get("items", [])[:25]:
-        app_id = str(game.get("id", ""))
-        name = game.get("name", "")
-
-        if app_id.isdigit() and name:
-            results.append({
-                "app_id": app_id,
-                "name": name,
-            })
-
+    for item in data.get("items", [])[:25]:
+        product_id = str(item.get("id", ""))
+        name = item.get("name", "")
+        if product_id.isdigit() and name:
+            results.append({"product_id": product_id, "name": name})
     return results
 
 
-def is_admin(user: discord.abc.User) -> bool:
-    """確認使用者是否為指定管理員。"""
+def get_steam_game(product_id):
+    response = requests.get(
+        "https://store.steampowered.com/api/appdetails",
+        params={"appids": product_id, "l": "tchinese", "cc": "tw"},
+        timeout=15,
+    )
+    response.raise_for_status()
+    result = response.json().get(str(product_id), {})
+    if not isinstance(result, dict) or not result.get("success"):
+        return None
+    data = result.get("data", {})
+    return data.get("name") if isinstance(data, dict) else None
+
+
+def platform_of(game):
+    return str(game.get("platform", "steam")).lower()
+
+
+def product_id_of(game):
+    return str(game.get("product_id", game.get("app_id", ""))).strip()
+
+
+def is_admin(user):
     return ADMIN_ID is not None and str(user.id) == ADMIN_ID
 
 
-@tree.command(
-    name="ping",
-    description="測試 Game Price Tracker Bot 是否正常運作",
-)
+async def platform_autocomplete(interaction, current):
+    if not is_admin(interaction.user) or not current.strip():
+        return []
+    platform = str(getattr(interaction.namespace, "platform", "steam")).lower()
+    # Only Steam has a live, verified search adapter for now.
+    if platform != "steam":
+        return []
+    try:
+        results = await asyncio.to_thread(search_steam_games, current.strip())
+        return [
+            app_commands.Choice(
+                name=f"{item['name']} (ID: {item['product_id']})"[:100],
+                value=item["product_id"],
+            )
+            for item in results[:25]
+        ]
+    except (requests.RequestException, ValueError, KeyError, TypeError):
+        return []
+
+
+async def remove_game_autocomplete(interaction, current):
+    if not is_admin(interaction.user):
+        return []
+    platform = str(getattr(interaction.namespace, "platform", "steam")).lower()
+    query = current.strip().casefold()
+    try:
+        games = await asyncio.to_thread(load_github_watchlist)
+        choices = []
+        for game in games:
+            if platform_of(game) != platform:
+                continue
+            product_id = product_id_of(game)
+            name = str(game.get("name", ""))
+            if not product_id or not name:
+                continue
+            if query and query not in name.casefold() and query not in product_id.casefold():
+                continue
+            choices.append(
+                app_commands.Choice(name=f"{name} ({product_id})"[:100], value=product_id)
+            )
+        return choices[:25]
+    except (requests.RequestException, ValueError, KeyError, TypeError, RuntimeError):
+        return []
+
+
+@tree.command(name="ping", description="測試 Game Price Tracker Bot 是否正常運作")
 async def ping(interaction: discord.Interaction):
-    await interaction.response.send_message(
-        "🏓 Pong！Game Price Tracker Bot 正常運作。",
-        ephemeral=True,
-    )
+    await interaction.response.send_message("🏓 Pong！Game Price Tracker Bot 正常運作。", ephemeral=True)
 
 
-@tree.command(
-    name="admincheck",
-    description="檢查自己是否具有 Bot 管理員權限",
-)
+@tree.command(name="admincheck", description="檢查自己是否具有 Bot 管理員權限")
 async def admincheck(interaction: discord.Interaction):
-    if is_admin(interaction.user):
-        message = "✅ 你已通過管理員驗證。"
-    else:
-        message = "⛔ 你沒有 Bot 管理員權限。"
-
-    await interaction.response.send_message(
-        message,
-        ephemeral=True,
-    )
+    message = "✅ 你已通過管理員驗證。" if is_admin(interaction.user) else "⛔ 你沒有 Bot 管理員權限。"
+    await interaction.response.send_message(message, ephemeral=True)
 
 
-
-@tree.command(
-    name="list",
-    description="查看目前追蹤的遊戲",
-)
+@tree.command(name="list", description="查看目前追蹤的遊戲")
 async def list_games(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True, thinking=True)
-
     try:
-        games = load_github_watchlist()
-
+        games = await asyncio.to_thread(load_github_watchlist)
         embed = discord.Embed(
             title="🎮 遊戲追蹤清單",
             description=f"目前共追蹤 **{len(games)}** 款遊戲",
             color=discord.Color.blurple(),
         )
-
         if not games:
             embed.description = "目前沒有追蹤任何遊戲。"
-
-        else:
-            platform_names = {
-                "steam": "Steam",
-                "ns2": "Nintendo Switch 2",
-                "ps5": "PlayStation 5",
-            }
-
-            grouped_games = {}
-
-            for game in games:
-                platform = str(
-                    game.get("platform", "unknown")
-                ).lower()
-
-                grouped_games.setdefault(platform, []).append(game)
-
-            for platform, platform_games in grouped_games.items():
-                platform_name = platform_names.get(
-                    platform,
-                    platform.upper(),
-                )
-
-                embed.add_field(
-                    name=f"🕹️ {platform_name}（{len(platform_games)} 款）",
-                    value="\u200b",
-                    inline=False,
-                )
-
-                for index, game in enumerate(platform_games, start=1):
-                    name = game.get("name", "未知遊戲")
-                    app_id = game.get("app_id")
-
-                    details = f"**{index}. {name}**"
-
-                    if platform == "steam" and app_id:
-                        details += f"\nApp ID：`{app_id}`"
-
-                    embed.add_field(
-                        name="\u200b",
-                        value=details,
-                        inline=False,
-                    )
-
+        for platform, platform_name in SUPPORTED_PLATFORMS.items():
+            platform_games = [game for game in games if platform_of(game) == platform]
+            if not platform_games:
+                continue
+            embed.add_field(
+                name=f"🕹️ {platform_name}（{len(platform_games)} 款）",
+                value="\u200b",
+                inline=False,
+            )
+            for index, game in enumerate(platform_games, start=1):
+                product_id = product_id_of(game)
+                details = f"**{index}. {game.get('name', '未知遊戲')}**"
+                if product_id:
+                    details += f"\n產品 ID：`{product_id}`"
+                details += f"\n地區：`{game.get('region', 'TW')}`"
+                embed.add_field(name="\u200b", value=details, inline=False)
         embed.set_footer(text="Game Price Tracker")
-
-        await interaction.followup.send(
-            embed=embed,
-            ephemeral=True,
-        )
-
+        await interaction.followup.send(embed=embed, ephemeral=True)
     except requests.RequestException:
-        await interaction.followup.send(
-            "❌ 暫時無法連線至 GitHub，請稍後再試。",
-            ephemeral=True,
-        )
-    except (ValueError, KeyError, TypeError):
-        await interaction.followup.send(
-            "❌ 遊戲清單格式有誤，請檢查 GitHub 上的 JSON 檔案。",
-            ephemeral=True,
-        )
+        await interaction.followup.send("❌ 暫時無法連線至 GitHub，請稍後再試。", ephemeral=True)
+    except (ValueError, KeyError, TypeError, RuntimeError):
+        await interaction.followup.send("❌ 遊戲清單格式或設定有誤，請檢查 GitHub 上的 JSON 與 Token。", ephemeral=True)
 
 
-
-async def add_game_autocomplete(
-    interaction: discord.Interaction,
-    current: str,
-):
-    if not is_admin(interaction.user) or not current.strip():
-        return []
-
-    try:
-        games = await __import__("asyncio").to_thread(
-            search_steam_games,
-            current.strip(),
-        )
-
-        return [
-            app_commands.Choice(
-                name=f"{game['name']} (ID: {game['app_id']})"[:100],
-                value=game["app_id"],
-            )
-            for game in games[:25]
-        ]
-
-    except (requests.RequestException, ValueError, KeyError, TypeError):
-        return []
-    
-
-async def remove_game_autocomplete(
-    interaction: discord.Interaction,
-    current: str,
-):
-    if not is_admin(interaction.user):
-        return []
-
-    try:
-        games = await __import__("asyncio").to_thread(
-            load_github_watchlist,
-        )
-
-        query = current.strip().casefold()
-        choices = []
-
-        for game in games:
-            if game.get("platform") != "steam":
-                continue
-
-            app_id = str(game.get("app_id", ""))
-            name = str(game.get("name", ""))
-
-            if not app_id.isdigit() or not name:
-                continue
-
-            if query and query not in name.casefold() and query not in app_id:
-                continue
-
-            choices.append(
-                app_commands.Choice(
-                    name=f"{name} (ID: {app_id})"[:100],
-                    value=app_id,
-                )
-            )
-
-        return choices[:25]
-
-    except (
-        requests.RequestException,
-        ValueError,
-        KeyError,
-        TypeError,
-    ):
-        return []
+PLATFORM_CHOICES = [
+    app_commands.Choice(name="Steam", value="steam"),
+    app_commands.Choice(name="PlayStation 5", value="ps5"),
+    app_commands.Choice(name="Nintendo Switch 2", value="ns2"),
+]
 
 
-@tree.command(
-    name="add",
-    description="新增要追蹤的 Steam 遊戲（管理員限定）",
-)
+@tree.command(name="add", description="選擇平台並搜尋要追蹤的遊戲（管理員限定）")
 @app_commands.describe(
-    game_name="搜尋並選擇要追蹤的 Steam 遊戲",
+    platform="先選擇遊戲平台",
+    game="輸入遊戲名稱，並從搜尋結果中選擇",
 )
-@app_commands.autocomplete(game_name=add_game_autocomplete)
-async def add_game(
-    interaction: discord.Interaction,
-    game_name: str,
-):
-    app_id = game_name
+@app_commands.choices(platform=PLATFORM_CHOICES)
+@app_commands.autocomplete(game=platform_autocomplete)
+async def add_game(interaction: discord.Interaction, platform: str, game: str):
     if not is_admin(interaction.user):
+        await interaction.response.send_message("⛔ 你沒有 Bot 管理員權限。", ephemeral=True)
+        return
+    platform = platform.lower()
+    if platform != "steam":
         await interaction.response.send_message(
-            "⛔ 你沒有 Bot 管理員權限。",
+            f"ℹ️ 已選擇 {SUPPORTED_PLATFORMS.get(platform, platform)}，但目前尚未接入可驗證的台灣商店搜尋與查價來源。尚未修改清單；Steam 功能不受影響。",
             ephemeral=True,
         )
         return
-
-    app_id = app_id.strip()
-
-    if not app_id.isdigit():
-        await interaction.response.send_message(
-            f"❌ 請從 Steam 搜尋結果中選擇有效的遊戲。",
-            ephemeral=True,
-        )
+    product_id = game.strip()
+    if not product_id.isdigit():
+        await interaction.response.send_message("❌ 請從 Steam 搜尋結果中選擇遊戲。", ephemeral=True)
         return
 
     await interaction.response.defer(ephemeral=True, thinking=True)
-
     try:
-        steam_name = get_steam_game(app_id)
-
+        steam_name = await asyncio.to_thread(get_steam_game, product_id)
         if steam_name is None:
-            await interaction.followup.send(
-                f"❌ Steam 查不到 App ID `{app_id}`，請確認 ID 是否正確。",
-                ephemeral=True,
-            )
+            await interaction.followup.send(f"❌ Steam 查不到 App ID `{product_id}`，請重新搜尋。", ephemeral=True)
             return
 
-        games = load_github_watchlist()
+        def add_mutation(games):
+            if any(platform_of(item) == "steam" and product_id_of(item) == product_id for item in games):
+                return games, False
+            games.append({
+                "platform": "steam",
+                "store": "steam",
+                "product_id": product_id,
+                "region": "TW",
+                "name": steam_name,
+            })
+            return games, True
 
-        if any(
-            game.get("platform") == "steam"
-            and str(game.get("app_id")) == app_id
-            for game in games
-        ):
-            await interaction.followup.send(
-                "⚠️ 這款遊戲已經在追蹤清單中。",
-                ephemeral=True,
-            )
+        added = await asyncio.to_thread(update_github_watchlist, add_mutation)
+        if not added:
+            await interaction.followup.send("⚠️ 這款遊戲已經在追蹤清單中。", ephemeral=True)
             return
-
-        games.append({
-            "platform": "steam",
-            "app_id": app_id,
-            "name": steam_name,
-        })
-
-        save_github_watchlist(games)
-
         await interaction.followup.send(
-            f"✅ 已新增 **{steam_name}**（App ID：`{app_id}`）到 GitHub 遊戲清單。",
+            f"✅ 已新增 **{steam_name}**（Steam App ID：`{product_id}`，台灣商店）到追蹤清單。",
             ephemeral=True,
         )
-
-    except requests.RequestException:
-        await interaction.followup.send(
-            "❌ GitHub 連線或更新失敗，請檢查 Token 權限及網路。",
-            ephemeral=True,
-        )
-    except (ValueError, KeyError, TypeError):
-        await interaction.followup.send(
-            "❌ 讀取遊戲清單時發生資料格式錯誤，尚未確認更新成功。",
-            ephemeral=True,
-        )
+    except (requests.RequestException, ValueError, KeyError, TypeError, RuntimeError) as error:
+        await interaction.followup.send(f"❌ 新增失敗：{type(error).__name__}。請稍後再試。", ephemeral=True)
 
 
-@tree.command(
-    name="remove",
-    description="移除追蹤的 Steam 遊戲（管理員限定）",
-)
-@app_commands.describe(
-    game="選擇 Watch List 中已追蹤的遊戲",
-)
+@tree.command(name="remove", description="依平台移除追蹤遊戲（管理員限定）")
+@app_commands.describe(platform="選擇遊戲平台", game="選擇該平台已追蹤的遊戲")
+@app_commands.choices(platform=PLATFORM_CHOICES)
 @app_commands.autocomplete(game=remove_game_autocomplete)
-async def remove_game(
-    interaction: discord.Interaction,
-    game: str,
-):
-    app_id = game
+async def remove_game(interaction: discord.Interaction, platform: str, game: str):
     if not is_admin(interaction.user):
-        await interaction.response.send_message(
-            "⛔ 你沒有 Bot 管理員權限。",
-            ephemeral=True,
-        )
+        await interaction.response.send_message("⛔ 你沒有 Bot 管理員權限。", ephemeral=True)
         return
-
-    app_id = app_id.strip()
-
-    if not app_id.isdigit():
-        await interaction.response.send_message(
-            "❌ 請輸入有效的 Steam App ID。",
-            ephemeral=True,
-        )
-        return
-
+    platform = platform.lower()
+    product_id = game.strip()
     await interaction.response.defer(ephemeral=True, thinking=True)
-
     try:
-        games = load_github_watchlist()
+        def remove_mutation(games):
+            removed = [
+                item for item in games
+                if platform_of(item) == platform and product_id_of(item) == product_id
+            ]
+            if not removed:
+                return games, None
+            return [
+                item for item in games
+                if not (platform_of(item) == platform and product_id_of(item) == product_id)
+            ], removed[0]
 
-        removed_games = [
-            game for game in games
-            if (
-                game.get("platform") == "steam"
-                and str(game.get("app_id")) == app_id
-            )
-        ]
-
-        remaining_games = [
-            game for game in games
-            if not (
-                game.get("platform") == "steam"
-                and str(game.get("app_id")) == app_id
-            )
-        ]
-
-        if len(remaining_games) == len(games):
-            await interaction.followup.send(
-                f"⚠️ 找不到 App ID 為 `{app_id}` 的追蹤遊戲。",
-                ephemeral=True,
-            )
+        removed = await asyncio.to_thread(update_github_watchlist, remove_mutation)
+        if removed is None:
+            await interaction.followup.send("⚠️ 找不到該平台的追蹤遊戲，清單未變更。", ephemeral=True)
             return
-
-        save_github_watchlist(remaining_games)
-
-        removed_name = removed_games[0].get("name", "未知遊戲")
-
         await interaction.followup.send(
-            f"✅ 已移除 **{removed_name}**（App ID：`{app_id}`）。",
+            f"✅ 已從 {SUPPORTED_PLATFORMS.get(platform, platform)} 移除 **{removed.get('name', '未知遊戲')}**。",
             ephemeral=True,
         )
-
-    except requests.RequestException:
-        await interaction.followup.send(
-            "❌ GitHub 連線或更新失敗，請檢查 Token 權限及網路。",
-            ephemeral=True,
-        )
-    except (ValueError, KeyError, TypeError):
-        await interaction.followup.send(
-            "❌ 讀取遊戲清單時發生資料格式錯誤。",
-            ephemeral=True,
-        )
+    except (requests.RequestException, ValueError, KeyError, TypeError, RuntimeError):
+        await interaction.followup.send("❌ 移除失敗，請稍後再試並檢查 GitHub Token 權限。", ephemeral=True)
 
 
-@tree.command(
-    name="help",
-    description="查看 Game Price Tracker 的使用說明",
-)
+@tree.command(name="help", description="查看 Game Price Tracker 的使用說明")
 async def help_command(interaction: discord.Interaction):
     message = (
         "🎮 **Game Price Tracker 使用說明**\n\n"
         "**一般指令**\n"
         "• `/ping` — 測試 Bot 是否正常運作\n"
-        "• `/list` — 查看目前追蹤的 Steam 遊戲\n"
-        "• `/help` — 顯示這份使用說明\n\n"
+        "• `/list` — 查看目前追蹤的遊戲（依平台分組）\n"
+        "• `/help` — 顯示使用說明\n\n"
         "**管理員限定指令**\n"
         "• `/admincheck` — 檢查管理員權限\n"
-        "• `/add game_name` — 新增追蹤遊戲\n"
-        "• `/remove game_name` — 移除追蹤遊戲\n\n"
-        "📌 新增遊戲時，請使用正確的 Steam App ID。\n"
-        "📌 遊戲清單儲存在 GitHub，供每日自動查價流程使用。"
+        "• `/add platform game` — 先選平台，再搜尋遊戲\n"
+        "• `/remove platform game` — 依平台移除追蹤遊戲\n\n"
+        "📌 目前只有 Steam 已接入即時搜尋與查價；PS5、NS2 尚待可靠的台灣商店資料來源確認。\n"
+        "📌 遊戲清單儲存在 GitHub，供自動查價流程使用。"
     )
-
-    await interaction.response.send_message(
-        message,
-        ephemeral=True,
-    )
+    await interaction.response.send_message(message, ephemeral=True)
 
 
 @client.event
@@ -521,30 +342,17 @@ async def on_ready():
     guild = discord.Object(id=int(GUILD_ID))
     tree.copy_global_to(guild=guild)
     synced = await tree.sync(guild=guild)
-
     print(f"已登入 Discord：{client.user}")
     print(f"已同步 {len(synced)} 個斜線指令到指定伺服器。")
 
 
 if __name__ == "__main__":
     if not TOKEN:
-        raise RuntimeError(
-            "找不到 DISCORD_BOT_TOKEN，請檢查 .env 檔案。"
-        )
-    
+        raise RuntimeError("找不到 DISCORD_BOT_TOKEN，請檢查 .env 檔案。")
     if not GITHUB_TOKEN:
-        raise RuntimeError(
-            "找不到 GITHUB_TOKEN，請檢查 .env 檔案。"
-        )
-
+        raise RuntimeError("找不到 GITHUB_TOKEN，請檢查 .env 檔案。")
     if not ADMIN_ID or not ADMIN_ID.isdigit():
-        raise RuntimeError(
-            "DISCORD_ADMIN_ID 尚未正確設定，請檢查 .env 檔案。"
-        )
-    
+        raise RuntimeError("DISCORD_ADMIN_ID 尚未正確設定，請檢查 .env 檔案。")
     if not GUILD_ID or not GUILD_ID.isdigit():
-        raise RuntimeError(
-            "DISCORD_GUILD_ID 尚未正確設定，請檢查 .env 檔案。"
-        )
-
+        raise RuntimeError("DISCORD_GUILD_ID 尚未正確設定，請檢查 .env 檔案。")
     client.run(TOKEN)
