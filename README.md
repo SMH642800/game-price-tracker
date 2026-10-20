@@ -4,10 +4,12 @@ A Discord-managed game price tracker. The scheduled GitHub Actions workflow curr
 
 ## Current capabilities
 
-- Discord slash commands: `/add`, `/remove`, `/list`, `/help`, `/ping`, and `/admincheck`.
+- Discord slash commands: `/add`, `/remove`, `/list`, `/price`, `/history`, `/help`, `/ping`, and `/admincheck`.
 - `/add` and `/remove` ask for a platform first. Steam has live search and price checking.
 - PS5 and Nintendo Switch 2 platform identifiers are reserved in the data model and command menus, but their live store search and price providers are not enabled until a reliable Taiwan-region source is verified.
 - Notification state is stored in `notification_state.json`; corrupted JSON stops the run rather than silently resetting history.
+- `price_history.json` stores up to 365 daily Taiwan-store price observations per product; same-day checks replace that day's sample.
+- `/price` fetches the current Taiwan Steam price. `/history` displays recorded observations and the lowest price observed since tracking began.
 - Partial price-check failures produce a failed workflow status while successfully sent notification state is still saved.
 - GitHub watchlist updates re-read the current file and retry SHA conflicts to reduce lost updates.
 
@@ -24,6 +26,8 @@ Each entry identifies a platform-specific product:
   "name": "Stardew Valley"
 }
 ```
+
+Historical-price limitation: Steam App Details provides current price, not a complete historical price series. This project records prices from the first successful scheduled check onward. Backfilling older prices requires a separate historical data provider (for example, an API with its own access/key/terms); third-party data should not be assumed complete or free.
 
 Legacy Steam entries using `app_id` remain readable. New entries should use `product_id` and explicit `store` / `region` values. Notification-state keys are namespaced as `platform:store:region:product_id`.
 
