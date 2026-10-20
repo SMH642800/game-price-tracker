@@ -183,6 +183,7 @@ class NintendoCommandTests(unittest.IsolatedAsyncioTestCase):
         price = {
             "available": True, "current_price": 1290.0, "regular_price": 1790.0,
             "discount_price": 1290.0, "currency": "TWD", "region": "TW",
+            "sales_status": "onsale",
             "provider": "Nintendo eShop price API (undocumented)",
             "retrieved_at": "2026-10-20T00:00:00+00:00",
             "url": "https://ec.nintendo.com/TW/zh/titles/70010000012345",
