@@ -52,6 +52,16 @@ GitHub Actions repository secrets:
 
 The existing GitHub Actions schedule remains `6 12 * * *` (12:06 UTC / 20:06 Taiwan time). The separately configured cron-job.org trigger is not managed by this repository file.
 
+## Nintendo source feasibility probe
+
+A manual, low-rate probe for Nintendo Taiwan's candidate catalogue and digital-price endpoints is available at `scripts/probe_nintendo_sources.py`. Run it locally with network access:
+
+```bash
+python scripts/probe_nintendo_sources.py
+```
+
+It searches the catalogue for 時之笛 and 亰都幻都 / Kyoto Xanadu, then requests price data only for matching NSUIDs. It does not save a catalogue, run in CI, or enable numeric prices in Discord. The endpoints are undocumented and automated reuse permissions have not been confirmed; a successful probe is technical evidence only, not approval to enable production automation. See `docs/console-data-source-audit.md` for the current source gates.
+
 ## Local checks
 
 Install dependencies with `python -m pip install -r requirements.txt`, then run `python -m unittest discover -s tests -v`. A normal `python main.py` run requires the Discord webhook secret and live Steam access.
