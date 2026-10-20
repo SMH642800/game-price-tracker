@@ -14,6 +14,7 @@ import os
 import tempfile
 import time
 import unicodedata
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -28,7 +29,8 @@ PRICE_URL = "https://api.ec.nintendo.com/v1/price"
 PAGE_SIZE = 24
 REQUEST_DELAY_SECONDS = 0.2
 TIMEOUT_SECONDS = 15
-MAX_PAGES = 500
+WARNING_PAGES = 800
+MAX_PAGES = 1000
 CACHE_TTL_SECONDS = 24 * 60 * 60
 CACHE_SCHEMA_VERSION = 1
 DEFAULT_CACHE_PATH = Path(__file__).resolve().parents[1] / ".cache" / "nintendo_tw_catalogue.json"
@@ -142,6 +144,14 @@ def load_catalogue(
     page_count = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
     if page_count > MAX_PAGES:
         raise ValueError(f"Catalogue reports {page_count} pages; safety cap is {MAX_PAGES}")
+    if page_count > WARNING_PAGES:
+        warnings.warn(
+            f"Catalogue reports {page_count} pages, above the warning threshold "
+            f"of {WARNING_PAGES}; continuing because it is within the hard cap "
+            f"of {MAX_PAGES}.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
 
     rows = [row for row in items if isinstance(row, dict)]
     for page in range(2, page_count + 1):
