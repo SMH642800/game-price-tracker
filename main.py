@@ -1,11 +1,11 @@
 import json
-import re
 import os
 import sys
 import tempfile
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 import requests
+import steam
 
 TAIWAN_TZ = timezone(timedelta(hours=8))
 
@@ -20,60 +20,17 @@ STEAM_API_URL = (
 
 
 def get_steam_price(app_id, region="TW"):
-    response = requests.get(
-        STEAM_API_URL,
-        params={
-            "appids": app_id,
-            "cc": region.lower(),
-            "l": "zh-tw",
-        },
-        timeout=20,
+    """Return a verified regional Steam price using the shared provider adapter."""
+    game = steam.get_price(
+        app_id,
+        region=region,
+        language="zh-tw",
+        expiration_resolver=get_steam_discount_expiration,
     )
-    response.raise_for_status()
-
-    response_payload = response.json()
-    if not isinstance(response_payload, dict):
-        raise ValueError("Steam API response must be a JSON object")
-    payload = response_payload.get(str(app_id), {})
-
-    if not isinstance(payload, dict) or not payload.get("success"):
-        print(f"Steam API returned no usable data: {app_id}")
+    if game is None or not game.get("price_available"):
+        print(f"No usable price available: {app_id}")
         return None
-
-    game = payload.get("data")
-    if not isinstance(game, dict):
-        print(f"Steam API returned malformed game data: {app_id}")
-        return None
-    price = game.get("price_overview")
-
-    if not isinstance(price, dict):
-        print(f"No price available: {game.get('name', app_id)}")
-        return None
-
-    currency = price.get("currency")
-    if not isinstance(currency, str) or not currency.strip():
-        raise ValueError(f"Steam API returned no currency for {app_id}")
-    try:
-        final_minor = int(price["final"])
-        initial_minor = int(price["initial"])
-        discount = int(price.get("discount_percent", 0))
-    except (KeyError, TypeError, ValueError) as error:
-        raise ValueError(f"Steam API returned malformed price fields for {app_id}") from error
-    if final_minor < 0 or initial_minor < 0 or not 0 <= discount <= 100:
-        raise ValueError(f"Steam API returned out-of-range price fields for {app_id}")
-
-    return {
-        "name": game.get("name", f"Steam App {app_id}"),
-        "currency": currency.strip().upper(),
-        "final_price": final_minor / 100,
-        "initial_price": initial_minor / 100,
-        "discount": discount,
-        "discount_expiration": (
-            price.get("discount_expiration")
-            or get_steam_discount_expiration(app_id, region)
-        ),
-        "url": f"https://store.steampowered.com/app/{app_id}/",
-    }
+    return game
 
 
 def send_discord_message(message):
@@ -139,50 +96,8 @@ def save_notification_state(state):
 
 
 def get_steam_discount_expiration(app_id, region="TW"):
-    url = f"https://store.steampowered.com/app/{app_id}/"
-
-    try:
-        response = requests.get(
-            url,
-            params={"cc": region.lower(), "l": "english"},
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=20,
-        )
-        response.raise_for_status()
-
-        match = re.search(
-            r'<p class="game_purchase_discount_countdown">'
-            r'\s*SPECIAL PROMOTION!\s*Offer ends '
-            r'(\d{1,2}) ([A-Za-z]+)',
-            response.text,
-            re.IGNORECASE,
-        )
-
-        if not match:
-            return None
-
-        day = int(match.group(1))
-        month_name = match.group(2)
-
-        month = datetime.strptime(month_name, "%B").month
-        now = datetime.now(timezone.utc)
-
-        year = now.year
-        expiration = datetime(
-            year, month, day, 23, 59, 59, tzinfo=timezone.utc
-        )
-
-        if expiration < now:
-            expiration = datetime(
-                year + 1, month, day, 23, 59, 59,
-                tzinfo=timezone.utc,
-            )
-
-        return int(expiration.timestamp())
-
-    except (requests.RequestException, ValueError) as error:
-        print(f"Could not parse Steam sale expiration for {app_id}: {error}")
-        return None
+    """Compatibility wrapper for the shared Steam provider's best-effort parser."""
+    return steam.get_discount_expiration(app_id, region)
 
 
 def format_taiwan_datetime(expiration):
