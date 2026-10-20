@@ -44,6 +44,18 @@ class SteamProviderTests(unittest.TestCase):
                 self.assertFalse(result["price_available"])
                 self.assertNotIn("final_price", result)
 
+    def test_currency_must_match_known_requested_region(self):
+        session = self.make_session({"123": {"success": True, "data": {
+            "name": "Example",
+            "price_overview": {
+                "currency": "TWD", "final": 9900, "initial": 9900,
+                "discount_percent": 0,
+            },
+        }}})
+        result = steam.get_price("123", region="JP", session=session)
+        self.assertFalse(result["price_available"])
+        self.assertNotIn("final_price", result)
+
     def test_malformed_price_fields_fail_closed(self):
         session = self.make_session({"123": {"success": True, "data": {
             "name": "Example",
