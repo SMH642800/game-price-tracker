@@ -42,8 +42,15 @@ def title_of(row: dict[str, Any]) -> str:
 
 def platform_matches(row: dict[str, Any], platform: str) -> bool:
     value = row.get("platform")
+    title = normalize(title_of(row))
+    # Some valid catalogue entries (including probe-confirmed priced titles)
+    # omit platform metadata. Keep those searchable, but mark them unverified
+    # in the returned choice/result rather than asserting a generation.
     if not isinstance(value, str) or not value.strip():
-        return False
+        is_explicit_switch_2_edition = any(
+            marker in title for marker in ("switch2edition", "nintendoswitch2", "ns2edition")
+        )
+        return not (platform == "ns" and is_explicit_switch_2_edition)
     normalized = normalize(value)
     is_switch_2 = "2" in normalized or "switch2" in normalized
     if platform == "ns2":
@@ -106,6 +113,7 @@ def search_nintendo_games(
             "product_id": nsuid,
             "name": title,
             "platform": platform,
+            "platform_verified": isinstance(row.get("platform"), str) and bool(row.get("platform", "").strip()),
         })
         if len(matches) >= max(1, min(limit, 25)):
             break
@@ -129,5 +137,6 @@ def get_nintendo_game_by_id(
                 "product_id": product_id,
                 "name": title_of(row),
                 "platform": platform,
+                "platform_verified": isinstance(row.get("platform"), str) and bool(row.get("platform", "").strip()),
             }
     return None
