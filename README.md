@@ -13,6 +13,12 @@ A Discord-managed game price tracker. The scheduled GitHub Actions workflow curr
 - Partial price-check failures produce a failed workflow status while successfully sent notification state is still saved.
 - GitHub watchlist updates re-read the current file and retry SHA conflicts to reduce lost updates.
 
+## Platform and deployment direction
+
+The roadmap covers **Steam, PS5, Nintendo Switch (NS), and Nintendo Switch 2 (NS2)**. NS and NS2 must be represented separately; the same game title can map to distinct platform products, editions, upgrade paths, and prices. Do not merge NS, NS2, and NS2 Edition prices based on title text alone.
+
+The system is also intended to run independently of a personal computer. See [the platform and cloud deployment roadmap](docs/platform-and-deployment-roadmap.md) for architecture constraints and staged deployment guidance. These are design requirements, not claims that all platforms or cloud hosting are already implemented.
+
 ## Watchlist format
 
 Each entry identifies a platform-specific product:
@@ -30,7 +36,7 @@ Each entry identifies a platform-specific product:
 Historical-price policy: this project separates prices observed directly by the Bot from historical information published by external price-tracking websites. The Bot must not label third-party estimates as its own observations, silently combine the two datasets, or invent missing historical values.
 
 - **Steam:** Steam App Details provides current price, not a complete historical price series. This project records prices from the first successful scheduled check onward. `/history` links to the matching [SteamDB app page](https://steamdb.info/) for broader historical context.
-- **PS5 and Nintendo Switch 2:** v1 supports title-based tracking plus store and web price-search links, without inventing product IDs or numeric prices. PS5 links use the Taiwan PlayStation Store search; Nintendo Switch 2 links to Nintendo Taiwan's official store landing page plus a web price search. These links are not a price feed, and results must be checked for the correct edition/version and Taiwan region. Automated numeric pricing and historical-price data remain disabled until reliable sources are verified. A first isolated Nintendo digital-price adapter and mocked tests are now present on the PR branch, but they are not wired into Discord commands until the live endpoint, catalogue source, and permitted-use requirements are verified. Physical Nintendo prices still require a separate approved retailer source.
+- **PS5, NS, and NS2:** v1 supports title-based tracking plus store and web price-search links, without inventing product IDs or numeric prices. Console links are references, not verified numeric prices. For Nintendo, digital and physical prices must remain separate, and every price must identify its region, currency, product/edition, source, and retrieval time. Automated numeric console pricing remains disabled until reliable sources and permitted use are verified. A first isolated Nintendo digital-price adapter and mocked tests exist on the PR branch, but they are not wired into Discord commands. Physical game prices require a separate approved retailer source.
 
 SteamDB research note: its [FAQ](https://steamdb.info/faq/) does not offer a generally available public API for this use and disallows unapproved automated scraping. Therefore this project links to SteamDB instead of scraping or importing its data. Direct historical-data import should only be considered if SteamDB provides explicit permission or a supported access method. Do not present SteamDB values as locally verified samples or silently mix them with this Bot's observations.
 
