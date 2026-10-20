@@ -22,6 +22,19 @@ class WatchlistUpdateTests(unittest.TestCase):
         self.assertEqual(result["discount"], 50)
         get.assert_called_once()
 
+    def test_console_store_links_are_platform_specific_and_encoded(self):
+        ps5 = bot.platform_store_links("ps5", "Final Fantasy XVI")
+        ns2 = bot.platform_store_links("ns2", "Mario Kart World")
+        self.assertIn("store.playstation.com/zh-hant-tw/search/Final+Fantasy+XVI", ps5["store"])
+        self.assertIn("google.com/search?q=", ps5["price_search"])
+        self.assertEqual(ns2["store"], "https://store.nintendo.com.tw/")
+        self.assertIn("Mario+Kart+World", ns2["price_search"])
+
+    def test_link_only_product_key_is_normalized(self):
+        self.assertEqual(bot.platform_product_key("  Mario   Kart World "), "mario kart world")
+        with self.assertRaises(ValueError):
+            bot.platform_product_key("   ")
+
     @patch.object(bot, "github_headers", return_value={"Accept": "application/vnd.github+json"})
     @patch.object(bot.requests, "put")
     @patch.object(bot, "fetch_github_watchlist_with_sha")
