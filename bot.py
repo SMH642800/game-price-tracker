@@ -486,7 +486,8 @@ async def history_command(interaction: discord.Interaction, game: str):
                 f"{sample.get('currency', currency)} {sample['final_price']:.2f} "
                 f"（折扣 {sample.get('discount', 0)}%）"
             )
-        lines.append(f"https://store.steampowered.com/app/{product_id}/")
+        lines.append(f"Steam 商店：https://store.steampowered.com/app/{product_id}/")
+        lines.append(f"SteamDB 歷史價格參考：https://steamdb.info/app/{product_id}/")
         await interaction.followup.send("\n".join(lines), ephemeral=True)
     except (requests.RequestException, ValueError, KeyError, TypeError, RuntimeError) as error:
         print(f"Price history query failed for {product_id}: {type(error).__name__}: {error}")
