@@ -27,10 +27,21 @@ def _price_amount(value: Any) -> float | None:
     if not isinstance(value, dict):
         return None
     raw = value.get("raw_value")
-    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+    # Nintendo currently returns numeric amounts as strings (e.g. "1880").
+    # Accept only a plain numeric string; never parse formatted currency text.
+    if isinstance(raw, bool) or raw is None:
+        return None
+    if isinstance(raw, (int, float)):
         amount = float(raw)
-        if math.isfinite(amount) and amount >= 0:
-            return amount
+    elif isinstance(raw, str):
+        try:
+            amount = float(raw.strip())
+        except ValueError:
+            return None
+    else:
+        return None
+    if math.isfinite(amount) and amount >= 0:
+        return amount
     return None
 
 
