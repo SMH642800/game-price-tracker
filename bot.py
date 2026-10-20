@@ -30,6 +30,7 @@ SUPPORTED_PLATFORMS = {
     "ps5": "PlayStation 5",
     "ns": "Nintendo Switch",
     "ns2": "Nintendo Switch 2",
+    "nintendo": "Nintendo Switch／Switch 2（平台未標註）",
 }
 
 intents = discord.Intents.default()
@@ -131,12 +132,12 @@ async def platform_autocomplete(interaction, current):
     if not current.strip():
         return []
     platform = str(getattr(interaction.namespace, "platform", "steam")).lower()
-    if platform in ("ns", "ns2"):
+    if platform in ("ns", "ns2", "nintendo"):
         try:
             results = await asyncio.to_thread(search_nintendo_games, current.strip(), platform)
             return [
                 app_commands.Choice(
-                    name=f"{item['name']}｜{SUPPORTED_PLATFORMS[platform]}｜{'平台未標註' if not item['platform_verified'] else '數位版'}"[:100],
+                    name=f"{item['name']}｜{SUPPORTED_PLATFORMS.get(item['platform'], SUPPORTED_PLATFORMS['nintendo'])}｜{'平台未標註' if not item['platform_verified'] else '數位版'}"[:100],
                     value=item["product_id"],
                 )
                 for item in results[:25]
@@ -240,8 +241,7 @@ async def list_games(interaction: discord.Interaction):
 
 ADD_LOOKUP_PLATFORM_CHOICES = [
     app_commands.Choice(name="Steam", value="steam"),
-    app_commands.Choice(name="Nintendo Switch", value="ns"),
-    app_commands.Choice(name="Nintendo Switch 2", value="ns2"),
+    app_commands.Choice(name="Nintendo Switch／Switch 2（合併搜尋）", value="nintendo"),
 ]
 
 REMOVE_PLATFORM_CHOICES = [
@@ -264,11 +264,12 @@ async def add_game(interaction: discord.Interaction, platform: str, game: str):
         await interaction.response.send_message("⛔ 你沒有 Bot 管理員權限。", ephemeral=True)
         return
     platform = platform.lower()
-    if platform in ("ns", "ns2"):
+    if platform in ("ns", "ns2", "nintendo"):
         await interaction.response.defer(ephemeral=True, thinking=True)
         try:
             product_id = game.strip()
             entry = await asyncio.to_thread(get_nintendo_game_by_id, product_id, platform)
+            actual_platform = entry["platform"] if entry else platform
             if entry is None:
                 await interaction.followup.send(
                     f"❌ 請從 {SUPPORTED_PLATFORMS[platform]} 的目錄搜尋結果中選擇遊戲。",
@@ -277,10 +278,11 @@ async def add_game(interaction: discord.Interaction, platform: str, game: str):
                 return
 
             def add_nintendo_mutation(games):
-                if any(platform_of(item) == platform and product_id_of(item) == product_id for item in games):
+                valid_platforms = {"ns", "ns2", "nintendo"} if platform == "nintendo" else {platform}
+                if any(platform_of(item) in valid_platforms and product_id_of(item) == product_id for item in games):
                     return games, False
                 games.append({
-                    "platform": platform,
+                    "platform": actual_platform,
                     "store": "nintendo_eshop",
                     "product_id": product_id,
                     "region": "TW",
@@ -295,7 +297,7 @@ async def add_game(interaction: discord.Interaction, platform: str, game: str):
             status = "已新增到追蹤清單" if added else "已在追蹤清單中"
             verification_note = "" if entry["platform_verified"] else "\n⚠️ Nintendo 目錄未標註平台世代，請先確認商品是否屬於所選平台。"
             await interaction.followup.send(
-                f"✅ {entry['name']}（{SUPPORTED_PLATFORMS[platform]}／台灣數位版，NSUID：{product_id}）{status}。\n"
+                f"✅ {entry['name']}（{SUPPORTED_PLATFORMS.get(actual_platform, SUPPORTED_PLATFORMS['nintendo'])}／台灣數位版，NSUID：{product_id}）{status}。\n"
                 "實體版價格不包含在內；Nintendo 數位價格介面尚未公開文件化。"
                 f"{verification_note}",
                 ephemeral=True,
@@ -431,10 +433,12 @@ async def handle_nintendo_price_query(interaction: discord.Interaction, platform
                 ephemeral=True,
             )
             return
+        actual_platform = entry["platform"]
+        display_platform = SUPPORTED_PLATFORMS.get(actual_platform, SUPPORTED_PLATFORMS["nintendo"])
         result = await asyncio.to_thread(nintendo.get_nintendo_digital_price, product_id, "TW", "zh")
         if result is None:
             message = (
-                f"🎮 **{entry['name']}**｜{SUPPORTED_PLATFORMS[platform]} 台灣數位版\n"
+                f"🎮 **{entry['name']}**｜{display_platform} 台灣數位版\n"
                 "目錄已找到遊戲，但價格介面沒有回傳對應的台灣價格紀錄。\n"
                 f"{entry_url(product_id)}"
             )
@@ -499,7 +503,7 @@ async def lookup_command(interaction: discord.Interaction, platform: str, game: 
     if platform == "steam":
         await handle_steam_price_query(interaction, query)
         return
-    if platform in ("ns", "ns2"):
+    if platform in ("ns", "ns2", "nintendo"):
         await handle_nintendo_price_query(interaction, platform, query)
         return
     await interaction.response.send_message("❌ 不支援的平台，請選擇 Steam、Nintendo Switch 或 Nintendo Switch 2。", ephemeral=True)
@@ -512,11 +516,11 @@ async def help_command(interaction: discord.Interaction):
         "**一般指令**\n"
         "• `/ping` — 測試 Bot 是否正常運作\n"
         "• `/list` — 查看目前追蹤的遊戲（依平台分組）\n"
-        "• `/lookup platform game` — 統一查詢遊戲價格；查詢 Steam 台灣現價或 Nintendo Switch／Switch 2 數位版價格\n"
+        "• `/lookup platform game` — 統一查詢遊戲價格；Nintendo Switch／Switch 2 使用合併搜尋\n"
         "• `/help` — 顯示使用說明\n\n"
         "**管理員限定指令**\n"
         "• `/admincheck` — 檢查管理員權限\n"
-        "• `/add platform game` — 先選平台，再搜尋遊戲\n"
+        "• `/add platform game` — 先選平台，再搜尋遊戲；Nintendo Switch／Switch 2 使用合併搜尋\n"
         "• `/remove platform game` — 依平台移除追蹤遊戲\n\n"
         "📌 /lookup 是統一查價入口：Steam 回傳台灣現價；NS／NS2 以目錄項目及 NSUID 查台灣數位版價格。PS5 不提供 Bot 自動搜尋或查價，既有手動追蹤項目仍可在清單中查看。\n"
         "📌 Nintendo 數位價格介面未公開文件化；不代表實體版價格。\n"
