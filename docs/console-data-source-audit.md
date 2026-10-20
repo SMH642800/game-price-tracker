@@ -122,3 +122,23 @@ This is a **tested-by-design adapter scaffold, not yet a production-enabled inte
 5. **Validation:** run `python -m unittest discover -s tests -v` and confirm PR CI on the updated head; separately perform a documented manual live smoke test for Taiwan, Japan, sale, non-sale, missing record, and Switch 2 title IDs.
 
 Until blockers 1–3 are resolved, console numeric prices remain disabled and this PR must remain Draft.
+
+
+## Additional Nintendo Taiwan catalogue probe (2026-10-20)
+
+A second public repository, [samsonjaw/tw-switch-price](https://github.com/samsonjaw/tw-switch-price), documents the candidate Nintendo Taiwan catalogue endpoint:
+
+- Catalogue: `https://www.nintendo.com/tw/api/software?sftab=all&spage=1`
+- Price: `https://api.ec.nintendo.com/v1/price?country=TW&lang=zh&ids=...`
+
+Its validation script reports a catalogue response shape with `items`, `total`, `title`, and `nsuid`, and a price response with `prices`, `title_id`, `sales_status`, `regular_price`, and optional `discount_price`. This is a useful implementation lead, but it remains community evidence: neither endpoint is documented as a stable public API contract, and the referenced repository does not expose a LICENSE file in the inspected root. We therefore do not copy its code or treat its existence as permission to reuse its dataset.
+
+A low-rate, manual-only diagnostic was added at `scripts/probe_nintendo_sources.py`. It reads the catalogue sequentially (200 ms between page requests), searches the user's test terms (`時之笛`, `亰都幻都`, `京都幻都`, `Kyoto Xanadu`), and requests prices only for matching NSUIDs. It does not write catalogue data, run in CI, or enable production commands. It is a diagnostic script and still needs to be run in an environment with network access.
+
+### Required interpretation of probe output
+
+- A matching catalogue row with an NSUID plus a matching `title_id` price record is evidence that the endpoint works for that item at that moment, not evidence of permission for production automation.
+- A missing Taiwan match or price record does **not** prove that the game is not sold in Taiwan. It may mean the catalogue is incomplete, an NSUID is missing, a title is named differently, or the endpoint response changed.
+- Automatic Japan fallback must wait until a Japan catalogue/search source can identify the corresponding Japanese product ID and live tests can distinguish regional unavailability from missing IDs, network errors, and schema changes.
+- The probe does not identify physical retail editions or retailer prices. Physical prices remain unavailable until a separate permitted retailer source is selected.
+- The user-supplied test cases must be evaluated from live output: *時之笛* should be non-discounted if a valid Taiwan price record exists; *亰都幻都-櫻花幻舞-* should show a discount only if Nintendo's returned `discount_price` and sales status actually indicate an active sale. Do not assume either status from the game title alone.
