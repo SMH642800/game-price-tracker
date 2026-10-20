@@ -30,7 +30,7 @@ SUPPORTED_PLATFORMS = {
     "ps5": "PlayStation 5",
     "ns": "Nintendo Switch",
     "ns2": "Nintendo Switch 2",
-    "nintendo": "Nintendo Switch／Switch 2（平台未標註）",
+    "nintendo": "Nintendo Switch／Switch 2",
 }
 
 intents = discord.Intents.default()
