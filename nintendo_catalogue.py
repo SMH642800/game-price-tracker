@@ -91,7 +91,7 @@ def load_cached_catalogue(*, now: float | None = None) -> list[dict[str, Any]]:
 
 def search_nintendo_games(
     query: str, platform: str, *, rows: list[dict[str, Any]] | None = None, limit: int = 25
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     """Return real catalogue entries with stable NSUIDs, deduplicated by ID."""
     if platform not in {"ns", "ns2"}:
         raise ValueError("Nintendo catalogue search supports ns and ns2 only")
@@ -122,7 +122,7 @@ def search_nintendo_games(
 
 def get_nintendo_game_by_id(
     product_id: str, platform: str, *, rows: list[dict[str, Any]] | None = None
-) -> dict[str, str] | None:
+) -> dict[str, Any] | None:
     product_id = str(product_id).strip()
     if not product_id.isdigit():
         return None
