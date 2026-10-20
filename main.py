@@ -194,6 +194,48 @@ def format_time_remaining(expiration):
     return " ".join(parts)
 
 
+def parse_expiration_timestamp(expiration):
+    """Parse a Steam Unix timestamp or a timezone-aware ISO-8601 timestamp."""
+    if expiration is None or isinstance(expiration, bool):
+        return None
+    if isinstance(expiration, (int, float)):
+        return int(expiration) if expiration > 0 else None
+    if not isinstance(expiration, str) or not expiration.strip():
+        return None
+    value = expiration.strip()
+    try:
+        if value.isdigit():
+            timestamp = int(value)
+            return timestamp if timestamp > 0 else None
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            return None
+        timestamp = int(parsed.astimezone(timezone.utc).timestamp())
+        return timestamp if timestamp > 0 else None
+    except (ValueError, OverflowError, OSError):
+        return None
+
+
+def format_expiration_datetime(expiration):
+    """Format either supported provider timestamp as Taiwan local time."""
+    timestamp = parse_expiration_timestamp(expiration)
+    if timestamp is None:
+        return "商店未提供有效的結束時間"
+    return format_taiwan_datetime(timestamp)
+
+
+def due_expiry_reminder_marker(expiration, now=None):
+    """Return a stable expiration marker when the sale ends within the next 48 hours."""
+    timestamp = parse_expiration_timestamp(expiration)
+    if timestamp is None:
+        return None
+    now = now or datetime.now(timezone.utc)
+    seconds_left = timestamp - now.timestamp()
+    if 0 < seconds_left <= 48 * 60 * 60:
+        return str(timestamp)
+    return None
+
+
 def main():
     notification_state = load_notification_state()
     with WATCHLIST_PATH.open("r", encoding="utf-8") as file:
@@ -254,6 +296,7 @@ def main():
                     print(f"No discount: {game['name']}")
                     continue
 
+                expiration = game.get("discount_expiration")
                 current_deal = {
                     "discount": game["discount"],
                     "final_price": game["final_price"],
@@ -263,7 +306,7 @@ def main():
                     f"目前價格：{game['currency']} {game['final_price']:.2f}\n"
                     f"原價：{game['currency']} {game['initial_price']:.2f}\n"
                     f"折扣：{game['discount']}%\n"
-                    f"截止時間：{format_taiwan_datetime(game.get('discount_expiration'))}（台灣時間）\n"
+                    f"截止時間：{format_expiration_datetime(expiration)}（台灣時間）\n"
                     f"剩餘時間：{format_time_remaining(game.get('discount_expiration'))}\n"
                     f"{game['url']}"
                 )
@@ -312,6 +355,7 @@ def main():
                     print(f"No discount: {game['name']}")
                     continue
 
+                expiration = game.get("discount_end_datetime")
                 current_deal = {
                     "discount": game["discount"],
                     "final_price": game["current_price"],
@@ -321,18 +365,59 @@ def main():
                     f"目前價格：TWD {game['current_price']:,.0f}\n"
                     f"原價：TWD {game['regular_price']:,.0f}\n"
                     f"折扣：約 {game['discount']}%\n"
-                    f"截止時間：Nintendo 商店未提供\n"
+                    f"截止時間：{format_expiration_datetime(expiration)}（台灣時間）\n"
                     f"{game['url']}"
                 )
 
-            if notification_state.get(state_key) == current_deal:
-                print(f"Already notified: {game['name']}")
+            previous_state = notification_state.get(state_key)
+            same_deal = (
+                isinstance(previous_state, dict)
+                and previous_state.get("discount") == current_deal["discount"]
+                and previous_state.get("final_price") == current_deal["final_price"]
+            )
+            if not same_deal:
+                send_discord_message(message)
+                updated_state = dict(current_deal)
+                if isinstance(previous_state, dict):
+                    updated_state["expiry_reminder_sent_for"] = previous_state.get(
+                        "expiry_reminder_sent_for"
+                    )
+                notification_state[state_key] = updated_state
+                save_notification_state(notification_state)
+                print(f"Notification sent: {game['name']}")
                 continue
 
-            send_discord_message(message)
-            notification_state[state_key] = current_deal
-            save_notification_state(notification_state)
-            print(f"Notification sent: {game['name']}")
+            print(f"Already notified: {game['name']}")
+            reminder_marker = due_expiry_reminder_marker(expiration)
+            if (
+                reminder_marker
+                and previous_state.get("expiry_reminder_sent_for") != reminder_marker
+            ):
+                if platform == "steam":
+                    reminder_message = (
+                        f"⏰ **Steam 特價即將結束提醒：{game['name']}**\n"
+                        f"特價將於 48 小時內結束！\n"
+                        f"目前價格：{game['currency']} {current_deal['final_price']:.2f}\n"
+                        f"原價：{game['currency']} {game['initial_price']:.2f}\n"
+                        f"折扣：{game['discount']}%\n"
+                        f"截止時間：{format_expiration_datetime(expiration)}（台灣時間）\n"
+                        f"{game['url']}"
+                    )
+                else:
+                    reminder_message = (
+                        f"⏰ **Nintendo 特價即將結束提醒：{game['name']}**\n"
+                        f"特價將於 48 小時內結束！\n"
+                        f"目前價格：TWD {game['current_price']:,.0f}\n"
+                        f"原價：TWD {game['regular_price']:,.0f}\n"
+                        f"折扣：約 {game['discount']}%\n"
+                        f"截止時間：{format_expiration_datetime(expiration)}（台灣時間）\n"
+                        f"{game['url']}"
+                    )
+                send_discord_message(reminder_message)
+                previous_state["expiry_reminder_sent_for"] = reminder_marker
+                notification_state[state_key] = previous_state
+                save_notification_state(notification_state)
+                print(f"Expiry reminder sent: {game['name']}")
         except (
             requests.RequestException,
             ValueError,
