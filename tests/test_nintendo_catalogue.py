@@ -166,6 +166,30 @@ class NintendoCatalogueSearchTests(unittest.TestCase):
     def test_catalogue_cache_lifetime_covers_weekly_refresh_interval(self):
         self.assertEqual(catalogue.CACHE_TTL_SECONDS, 8 * 24 * 60 * 60)
 
+    def test_downloads_fresh_weekly_cache_when_local_cache_is_missing(self):
+        with tempfile.TemporaryDirectory() as temp:
+            cache_path = Path(temp) / "tw.json"
+            payload = {
+                "schema_version": 1,
+                "fetched_at": 900,
+                "summary": {"reported_total": 1},
+                "rows": [{"title": "Remote Game", "nsuid": "70010000000001"}],
+            }
+            response = Mock()
+            response.raise_for_status.return_value = None
+            response.json.return_value = payload
+            with patch.object(catalogue, "CACHE_PATH", cache_path), patch.object(
+                catalogue.requests, "get", return_value=response
+            ) as get:
+                rows = catalogue.load_cached_catalogue(now=1000)
+            self.assertEqual(rows[0]["title"], "Remote Game")
+            self.assertTrue(cache_path.exists())
+            get.assert_called_once_with(
+                catalogue.REMOTE_CACHE_URLS["TW"],
+                headers={"Accept": "application/json"},
+                timeout=catalogue.TIMEOUT_SECONDS,
+            )
+
     def test_expired_cache_fails_closed(self):
         with tempfile.TemporaryDirectory() as temp:
             cache_path = Path(temp) / "cache.json"
@@ -174,8 +198,9 @@ class NintendoCatalogueSearchTests(unittest.TestCase):
                 "rows": [],
             }), encoding="utf-8")
             with patch.object(catalogue, "CACHE_PATH", cache_path):
-                with self.assertRaisesRegex(catalogue.NintendoCatalogueError, "過期"):
-                    catalogue.load_cached_catalogue(now=100 + catalogue.CACHE_TTL_SECONDS + 1)
+                with patch.object(catalogue.requests, "get", side_effect=catalogue.requests.RequestException("offline")):
+                    with self.assertRaisesRegex(catalogue.NintendoCatalogueError, "過期"):
+                        catalogue.load_cached_catalogue(now=100 + catalogue.CACHE_TTL_SECONDS + 1)
 
 
 if __name__ == "__main__":
