@@ -5,8 +5,8 @@ A Discord-managed game price tracker. The scheduled GitHub Actions workflow curr
 ## Current capabilities
 
 - Discord slash commands: `/add`, `/remove`, `/list`, `/price`, `/help`, `/ping`, and `/admincheck`.
-- `/add` and `/remove` ask for a platform first. Steam has live search and price checking; PS5 and Nintendo Switch 2 use title-based lookup and watchlist tracking.
-- `/lookup platform game` returns live Steam prices for Steam, and store plus web price-search links for PS5/NS2. Console links are references, not verified numeric prices.
+- `/add` and `/remove` ask for a platform first. Steam has live search and price checking; PS5, Nintendo Switch (NS), and Nintendo Switch 2 use title-based lookup and watchlist tracking.
+- `/lookup platform game` returns live Steam prices for Steam, and store plus web price-search links for PS5/NS/NS2. Console links are references, not verified numeric prices.
 - Notification state is stored in `notification_state.json`; corrupted JSON stops the run rather than silently resetting notification state.
 - `/price` fetches the current Taiwan Steam price.
 - Partial price-check failures produce a failed workflow status while successfully sent notification state is still saved.
