@@ -21,12 +21,14 @@ TIMEOUT_SECONDS = 15
 MAX_PAGES = 250
 CACHE_TTL_SECONDS = 24 * 60 * 60
 CACHE_PATH = Path(__file__).resolve().parent / ".cache" / "nintendo_tw_catalogue.json"
+HK_CACHE_PATH = Path(__file__).resolve().parent / ".cache" / "nintendo_hk_catalogue.json"
 
 # Curated fallback entries for verified digital editions omitted by the bulk Taiwan
 # catalogue endpoint. These entries are kept separate from downloaded cache data;
 # prices are still fetched live and validated by nintendo.py.
-# Source listing: https://ec.nintendo.com/HK/zh/titles/70010000128495
+# HK eShop fallback listing: https://ec.nintendo.com/HK/zh/titles/70010000128495
 # The Taiwan price endpoint was independently confirmed to return TWD 1,880 for this ID.
+# Additional HK catalogue rows can be merged from the optional HK cache below.
 MANUAL_CATALOGUE_ENTRIES: tuple[dict[str, Any], ...] = (
     {
         "title": "空之軌跡 the 2nd",
@@ -108,6 +110,31 @@ def load_cached_catalogue(*, now: float | None = None) -> list[dict[str, Any]]:
     return rows
 
 
+def load_optional_hk_catalogue(*, now: float | None = None) -> list[dict[str, Any]]:
+    """Read a fresh optional HK catalogue cache; absence/expiry must not break TW lookup."""
+    current = time.time() if now is None else now
+    try:
+        payload = json.loads(HK_CACHE_PATH.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return []
+    fetched_at = payload.get("fetched_at") if isinstance(payload, dict) else None
+    rows = payload.get("rows") if isinstance(payload, dict) else None
+    if (
+        not isinstance(fetched_at, (int, float))
+        or current - fetched_at < 0
+        or current - fetched_at > CACHE_TTL_SECONDS
+        or not isinstance(rows, list)
+        or not all(isinstance(row, dict) for row in rows)
+    ):
+        return []
+    normalized = []
+    for row in rows:
+        item = dict(row)
+        item.setdefault("catalogue_source", "HK")
+        normalized.append(item)
+    return normalized
+
+
 def search_nintendo_games(
     query: str, platform: str, *, rows: list[dict[str, Any]] | None = None, limit: int = 25
 ) -> list[dict[str, Any]]:
@@ -117,7 +144,11 @@ def search_nintendo_games(
     needle = normalize(query)
     if not needle:
         return []
-    catalogue = [*MANUAL_CATALOGUE_ENTRIES, *(load_cached_catalogue() if rows is None else rows)]
+    catalogue = [
+        *MANUAL_CATALOGUE_ENTRIES,
+        *(load_cached_catalogue() if rows is None else rows),
+        *(load_optional_hk_catalogue() if rows is None else []),
+    ]
     matches: list[dict[str, str]] = []
     seen_ids: set[str] = set()
     for row in catalogue:
