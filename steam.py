@@ -15,6 +15,11 @@ import requests
 APP_DETAILS_URL = "https://store.steampowered.com/api/appdetails/"
 STORE_SEARCH_URL = "https://store.steampowered.com/api/storesearch/"
 REQUEST_TIMEOUT_SECONDS = 15
+REGION_CURRENCIES = {
+    "TW": "TWD", "JP": "JPY", "US": "USD", "GB": "GBP",
+    "CA": "CAD", "AU": "AUD", "KR": "KRW", "CN": "CNY",
+    "DE": "EUR", "FR": "EUR", "IT": "EUR", "ES": "EUR",
+}
 
 
 def _integer_field(value: Any, field: str, *, default: int | None = None) -> int:
@@ -81,9 +86,10 @@ def get_price(
     if not isinstance(currency, str) or not currency.strip():
         return {"name": name, "price_available": False, "url": url}
     currency = currency.strip().upper()
-    # A Taiwan request with a different or absent currency is not a verified
-    # Taiwan numeric price. Never silently relabel it as TWD.
-    if region.upper() == "TW" and currency != "TWD":
+    # A known region with a different currency is not a verified regional
+    # numeric price. Never silently relabel a source currency.
+    expected_currency = REGION_CURRENCIES.get(region.upper())
+    if expected_currency is not None and currency != expected_currency:
         return {"name": name, "price_available": False, "url": url}
 
     final_minor = _integer_field(price.get("final"), "final price")
