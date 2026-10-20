@@ -19,7 +19,7 @@ PAGE_SIZE = 24
 REQUEST_DELAY_SECONDS = 0.2
 TIMEOUT_SECONDS = 15
 MAX_PAGES = 250
-CACHE_TTL_SECONDS = 24 * 60 * 60
+CACHE_TTL_SECONDS = 8 * 24 * 60 * 60
 CACHE_PATH = Path(__file__).resolve().parent / ".cache" / "nintendo_tw_catalogue.json"
 HK_CACHE_PATH = Path(__file__).resolve().parent / ".cache" / "nintendo_hk_catalogue.json"
 
