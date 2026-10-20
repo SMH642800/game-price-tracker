@@ -31,6 +31,20 @@ class SteamProviderTests(unittest.TestCase):
             {"appids": "123", "cc": "tw", "l": "tchinese"},
         )
 
+    def test_non_discounted_game_does_not_fetch_store_page_for_expiration(self):
+        session = self.make_session({"123": {"success": True, "data": {
+            "name": "Example",
+            "price_overview": {
+                "currency": "TWD", "final": 9900, "initial": 9900,
+                "discount_percent": 0,
+            },
+        }}})
+        expiration = Mock(return_value=1234567890)
+        result = steam.get_price("123", session=session, expiration_resolver=expiration)
+        self.assertEqual(result["discount"], 0)
+        self.assertIsNone(result["discount_expiration"])
+        expiration.assert_not_called()
+
     def test_missing_or_wrong_taiwan_currency_never_produces_numeric_price(self):
         for currency in (None, "JPY"):
             with self.subTest(currency=currency):
