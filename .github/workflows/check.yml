@@ -82,17 +82,32 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          WORKFLOW: ${{ github.workflow }}
+          RUN_NUMBER: ${{ github.run_number }}
+          EVENT_NAME: ${{ github.event_name }}
           BRANCH: ${{ github.ref_name }}
         run: |
-          MESSAGE="⚠️ Game Price Tracker 執行失敗！
+          MESSAGE="⚠️ **Game Price Tracker 執行失敗**
+          工作流程：${WORKFLOW}
+          執行編號：#${RUN_NUMBER}
+          觸發方式：${EVENT_NAME}
           分支：${BRANCH}
-          請查看錯誤紀錄：${RUN_URL}"
+          詳細紀錄：${RUN_URL}"
 
           PAYLOAD=$(jq -n --arg content "$MESSAGE" \
             '{content: $content}')
 
           curl --fail-with-body --silent --show-error \
+            --max-time 15 \
             -H "Content-Type: application/json" \
             -X POST \
             -d "$PAYLOAD" \
             "$DISCORD_WEBHOOK_URL"
+
+      - name: Report successful run to Healthchecks
+        env:
+          HEALTHCHECKS_PING_URL: ${{ secrets.HEALTHCHECKS_PING_URL }}
+        run: |
+          curl --fail --silent --show-error \
+            --max-time 15 \
+            "$HEALTHCHECKS_PING_URL"
