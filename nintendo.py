@@ -111,6 +111,8 @@ def get_nintendo_digital_price(
         and regular_currency != discount_currency
     )
     currency_verified = currency == expected_currency and not currencies_conflict
+    regular_verified = regular_amount is not None and regular_currency == expected_currency
+    discount_verified = discount_amount is not None and discount_currency == expected_currency
 
     # Only these known positive statuses count as currently purchasable.
     available = sales_status in {"onsale", "on_sale", "preorder", "pre_order"}
@@ -121,8 +123,8 @@ def get_nintendo_digital_price(
         "currency": currency,
         "sales_status": sales_status or "unknown",
         "available": available,
-        "regular_price": regular_amount,
-        "discount_price": discount_amount,
+        "regular_price": regular_amount if regular_verified else None,
+        "discount_price": discount_amount if discount_verified else None,
         "current_price": selected_amount if available and currency_verified else None,
         "retrieved_at": datetime.now(timezone.utc).isoformat(),
         "url": (
