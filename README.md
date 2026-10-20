@@ -9,7 +9,7 @@ A Discord-managed game price tracker. The scheduled GitHub Actions workflow curr
 - PS5 and Nintendo Switch 2 platform identifiers are reserved in the data model and command menus, but their live store search and price providers are not enabled until a reliable Taiwan-region source is verified.
 - Notification state is stored in `notification_state.json`; corrupted JSON stops the run rather than silently resetting history.
 - `price_history.json` stores up to 365 daily Taiwan-store price observations per product; same-day checks replace that day's sample.
-- `/price` fetches the current Taiwan Steam price. `/history` displays recorded observations and the lowest price observed since tracking began.
+- `/price` fetches the current Taiwan Steam price. `/history` displays recorded observations and the lowest price observed since tracking began, and links to the matching SteamDB app page for broader historical context.
 - Partial price-check failures produce a failed workflow status while successfully sent notification state is still saved.
 - GitHub watchlist updates re-read the current file and retry SHA conflicts to reduce lost updates.
 
@@ -27,7 +27,9 @@ Each entry identifies a platform-specific product:
 }
 ```
 
-Historical-price limitation: Steam App Details provides current price, not a complete historical price series. This project records prices from the first successful scheduled check onward. Backfilling older prices requires a separate historical data provider (for example, an API with its own access/key/terms); third-party data should not be assumed complete or free.
+Historical-price limitation: Steam App Details provides current price, not a complete historical price series. This project records prices from the first successful scheduled check onward. `/history` also links to the matching [SteamDB app page](https://steamdb.info/) so users can inspect SteamDB's historical-price information directly.
+
+SteamDB research note: its [FAQ](https://steamdb.info/faq/) does not offer a generally available public API for this use and disallows unapproved automated scraping. Therefore this project links to SteamDB instead of scraping or importing its data. Direct historical-data import should only be considered if SteamDB provides explicit permission or a supported access method. Do not present SteamDB values as locally verified samples or silently mix them with this Bot's observations.
 
 Legacy Steam entries using `app_id` remain readable. New entries should use `product_id` and explicit `store` / `region` values. Notification-state keys are namespaced as `platform:store:region:product_id`.
 
