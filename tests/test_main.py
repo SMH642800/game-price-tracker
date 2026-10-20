@@ -14,12 +14,27 @@ class NotificationStateTests(unittest.TestCase):
         self.addCleanup(self.temp_dir.cleanup)
         root = Path(self.temp_dir.name)
         self.state_path = root / "notification_state.json"
-        self.history_path = root / "price_history.json"
         self.watchlist_path = root / "games_track_list.json"
         self.state_path.write_text("{}", encoding="utf-8")
         main.STATE_PATH = self.state_path
-        main.HISTORY_PATH = self.history_path
         main.WATCHLIST_PATH = self.watchlist_path
+
+    def write_watchlist(self, games):
+        self.watchlist_path.write_text(
+            json.dumps(games, ensure_ascii=False), encoding="utf-8"
+        )
+
+    @staticmethod
+    def discounted_game(name="Example Game", price=10.0, discount=50):
+        return {
+            "name": name,
+            "currency": "TWD",
+            "final_price": price,
+            "initial_price": 20.0,
+            "discount": discount,
+            "discount_expiration": None,
+            "url": "https://store.steampowered.com/app/123/",
+        }
 
     def test_legacy_steam_state_key_is_migrated(self):
         self.state_path.write_text(
@@ -34,7 +49,12 @@ class NotificationStateTests(unittest.TestCase):
 
     def test_corrupt_state_fails_closed(self):
         self.state_path.write_text("{broken", encoding="utf-8")
-        with self.assertRaises(RuntimeError):
+        with self.assertRaisesRegex(RuntimeError, "invalid JSON"):
+            main.load_notification_state()
+
+    def test_non_object_state_fails_closed(self):
+        self.state_path.write_text("[]", encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeError, "JSON object"):
             main.load_notification_state()
 
     def test_state_save_writes_valid_json(self):
@@ -42,61 +62,99 @@ class NotificationStateTests(unittest.TestCase):
         main.save_notification_state(state)
         self.assertEqual(json.loads(self.state_path.read_text(encoding="utf-8")), state)
 
-    def test_price_history_records_one_sample_per_day_and_keeps_latest(self):
-        from datetime import datetime, timezone
-        history = {}
-        game = {
-            "currency": "TWD",
-            "final_price": 100,
-            "initial_price": 200,
-            "discount": 50,
-        }
-        first = datetime(2026, 1, 1, 1, tzinfo=timezone.utc)
-        later_same_day = datetime(2026, 1, 1, 8, tzinfo=timezone.utc)
-        main.record_price_sample(history, "steam:steam:TW:123", game, first)
-        game["final_price"] = 90
-        main.record_price_sample(history, "steam:steam:TW:123", game, later_same_day)
-        samples = history["steam:steam:TW:123"]
-        self.assertEqual(len(samples), 1)
-        self.assertEqual(samples[0]["final_price"], 90)
-        self.assertEqual(samples[0]["date_taiwan"], "2026-01-01")
+    def test_new_discount_sends_notification_and_persists_state(self):
+        self.write_watchlist([{
+            "platform": "steam", "store": "steam", "product_id": "123",
+            "region": "TW", "name": "Example Game",
+        }])
+        game = self.discounted_game()
+        with patch.object(main, "get_steam_price", return_value=game), \
+             patch.object(main, "send_discord_message") as send:
+            main.main()
 
-    def test_corrupt_price_history_fails_closed(self):
-        self.history_path.write_text("{broken", encoding="utf-8")
-        with self.assertRaises(RuntimeError):
-            main.load_price_history()
+        send.assert_called_once()
+        self.assertIn("特價通知", send.call_args.args[0])
+        self.assertIn("TWD 10.00", send.call_args.args[0])
+        self.assertEqual(
+            json.loads(self.state_path.read_text(encoding="utf-8")),
+            {"steam:steam:TW:123": {"discount": 50, "final_price": 10.0}},
+        )
 
-    def test_price_history_save_round_trips_json(self):
-        history = {"steam:steam:TW:123": [{
-            "timestamp": "2026-01-01T00:00:00Z",
-            "date_taiwan": "2026-01-01",
-            "currency": "TWD",
-            "final_price": 90.0,
-            "initial_price": 200.0,
-            "discount": 55,
-        }]}
-        main.save_price_history(history)
-        self.assertEqual(json.loads(self.history_path.read_text(encoding="utf-8")), history)
+    def test_unchanged_discount_does_not_send_duplicate_notification(self):
+        self.write_watchlist([{
+            "platform": "steam", "store": "steam", "product_id": "123",
+            "region": "TW", "name": "Example Game",
+        }])
+        state = {"steam:steam:TW:123": {"discount": 50, "final_price": 10.0}}
+        self.state_path.write_text(json.dumps(state), encoding="utf-8)
+        with patch.object(main, "get_steam_price", return_value=self.discounted_game()), \
+             patch.object(main, "send_discord_message") as send:
+            main.main()
+        send.assert_not_called()
+        self.assertEqual(json.loads(self.state_path.read_text(encoding="utf-8")), state)
+
+    def test_changed_discount_or_price_sends_a_new_notification(self):
+        self.write_watchlist([{
+            "platform": "steam", "store": "steam", "product_id": "123",
+            "region": "TW", "name": "Example Game",
+        }])
+        self.state_path.write_text(json.dumps({
+            "steam:steam:TW:123": {"discount": 50, "final_price": 10.0}
+        }), encoding="utf-8")
+        changed = self.discounted_game(price=8.0, discount=60)
+        with patch.object(main, "get_steam_price", return_value=changed), \
+             patch.object(main, "send_discord_message") as send:
+            main.main()
+        send.assert_called_once()
+        self.assertEqual(
+            json.loads(self.state_path.read_text(encoding="utf-8"))["steam:steam:TW:123"],
+            {"discount": 60, "final_price": 8.0},
+        )
+
+    def test_ended_discount_clears_state_so_a_future_sale_can_notify(self):
+        self.write_watchlist([{
+            "platform": "steam", "store": "steam", "product_id": "123",
+            "region": "TW", "name": "Example Game",
+        }])
+        self.state_path.write_text(json.dumps({
+            "steam:steam:TW:123": {"discount": 50, "final_price": 10.0}
+        }), encoding="utf-8")
+        with patch.object(main, "get_steam_price", return_value=self.discounted_game(discount=0)), \
+             patch.object(main, "send_discord_message") as send:
+            main.main()
+        send.assert_not_called()
+        self.assertEqual(json.loads(self.state_path.read_text(encoding="utf-8")), {})
+
+    def test_link_only_console_entries_are_skipped_without_failing_scheduled_run(self):
+        self.write_watchlist([
+            {
+                "platform": "ps5", "store": "link_only", "product_id": "game a",
+                "region": "TW", "name": "Console Game", "price_mode": "links_only",
+            },
+            {
+                "platform": "ns", "store": "link_only", "product_id": "game b",
+                "region": "TW", "name": "Switch Game", "price_mode": "links_only",
+            },
+            {
+                "platform": "ns2", "store": "link_only", "product_id": "game c",
+                "region": "TW", "name": "Switch 2 Game", "price_mode": "links_only",
+            },
+        ])
+        with patch.object(main, "get_steam_price") as get_price, \
+             patch.object(main, "send_discord_message") as send:
+            main.main()
+        get_price.assert_not_called()
+        send.assert_not_called()
 
     def test_successful_notification_state_survives_partial_failure(self):
-        self.watchlist_path.write_text(json.dumps([
+        self.write_watchlist([
             {"platform": "steam", "store": "steam", "product_id": "123", "region": "TW", "name": "Game A"},
             {"platform": "steam", "store": "steam", "product_id": "456", "region": "TW", "name": "Game B"},
-        ]), encoding="utf-8")
-
-        good_price = {
-            "name": "Game A",
-            "currency": "TWD",
-            "final_price": 10.0,
-            "initial_price": 20.0,
-            "discount": 50,
-            "discount_expiration": None,
-            "url": "https://store.steampowered.com/app/123/",
-        }
+        ])
 
         def price_side_effect(app_id, region):
             if app_id == "123":
-                return good_price
+                return self.discounted_game(name="Game A")
             raise requests.Timeout("simulated timeout")
 
         with patch.object(main, "get_steam_price", side_effect=price_side_effect), \
@@ -107,6 +165,29 @@ class NotificationStateTests(unittest.TestCase):
         self.assertEqual(exc.exception.code, 1)
         saved = json.loads(self.state_path.read_text(encoding="utf-8"))
         self.assertEqual(saved["steam:steam:TW:123"], {"discount": 50, "final_price": 10.0})
+
+    def test_stale_state_is_removed_for_any_steam_region(self):
+        self.write_watchlist([{
+            "platform": "steam", "store": "steam", "product_id": "123",
+            "region": "JP", "name": "Example Game",
+        }])
+        self.state_path.write_text(json.dumps({
+            "steam:steam:TW:gone": {"discount": 10, "final_price": 1},
+            "steam:steam:JP:123": {"discount": 10, "final_price": 1},
+        }), encoding="utf-8")
+        with patch.object(main, "get_steam_price", return_value=self.discounted_game(discount=0)), \
+             patch.object(main, "send_discord_message"):
+            main.main()
+        saved = json.loads(self.state_path.read_text(encoding="utf-8"))
+        self.assertNotIn("steam:steam:TW:gone", saved)
+        self.assertIn("steam:steam:JP:123", saved)
+
+    def test_invalid_watchlist_shape_fails_before_network_calls(self):
+        self.watchlist_path.write_text(json.dumps({"not": "a list"}), encoding="utf-8")
+        with patch.object(main, "get_steam_price") as get_price:
+            with self.assertRaisesRegex(RuntimeError, "JSON array"):
+                main.main()
+        get_price.assert_not_called()
 
 
 if __name__ == "__main__":
