@@ -202,7 +202,7 @@ class SteamPriceParsingTests(unittest.TestCase):
         response.json.return_value = {"123": {"success": True, "data": {
             "name": "Example Game",
             "price_overview": {
-                "currency": "TWD",
+                "currency": "JPY",
                 "final": 9900,
                 "initial": 19900,
                 "discount_percent": 50,
