@@ -67,34 +67,24 @@ class WatchlistUpdateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "JSON object"):
             bot.search_steam_games("Example")
 
-    def test_console_store_links_are_product_specific_searches_and_encoded(self):
-        ps5 = bot.platform_store_links("ps5", "Final Fantasy XVI")
-        ns = bot.platform_store_links("ns", "薩爾達傳說 王國之淚")
-        ns2 = bot.platform_store_links("ns2", "Mario Kart World")
-        self.assertIn("store.playstation.com/zh-hant-tw/search/Final+Fantasy+XVI", ps5["store"])
-        self.assertIn("google.com/search?q=", ps5["price_search"])
-        self.assertIn("site%3Astore.nintendo.com.tw", ns["store"])
-        self.assertIn("%E8%96%A9%E7%88%BE%E9%81%94", ns["store"])
-        self.assertIn("Nintendo+Switch+2", ns2["store"])
-        self.assertIn("Mario+Kart+World", ns2["price_search"])
-        self.assertNotEqual(ns["store"], ns2["store"])
+    def test_add_and_lookup_choices_exclude_ps5_but_remove_keeps_manual_ps5_entries(self):
+        add_lookup = {choice.value for choice in bot.ADD_LOOKUP_PLATFORM_CHOICES}
+        remove = {choice.value for choice in bot.REMOVE_PLATFORM_CHOICES}
+        self.assertEqual(add_lookup, {"steam", "ns", "ns2"})
+        self.assertIn("ps5", remove)
+        self.assertEqual(bot.SUPPORTED_PLATFORMS["ps5"], "PlayStation 5")
 
     def test_supported_platforms_distinguish_switch_generations(self):
         self.assertEqual(bot.SUPPORTED_PLATFORMS["ns"], "Nintendo Switch")
         self.assertEqual(bot.SUPPORTED_PLATFORMS["ns2"], "Nintendo Switch 2")
-        values = {choice.value for choice in bot.PLATFORM_CHOICES}
-        self.assertTrue({"steam", "ps5", "ns", "ns2"}.issubset(values))
+        values = {choice.value for choice in bot.ADD_LOOKUP_PLATFORM_CHOICES}
+        self.assertEqual(values, {"steam", "ns", "ns2"})
 
     def test_history_and_separate_price_commands_are_not_registered(self):
         self.assertIsNone(bot.tree.get_command("history"))
         self.assertIsNone(bot.tree.get_command("price_history"))
         self.assertIsNone(bot.tree.get_command("price"))
         self.assertIsNotNone(bot.tree.get_command("lookup"))
-
-    def test_link_only_product_key_is_normalized(self):
-        self.assertEqual(bot.platform_product_key("  Mario   Kart World "), "mario kart world")
-        with self.assertRaises(ValueError):
-            bot.platform_product_key("   ")
 
     @patch.object(bot, "github_headers", return_value={"Accept": "application/vnd.github+json"})
     @patch.object(bot.requests, "put")
@@ -243,6 +233,12 @@ class CommandRoutingTests(unittest.IsolatedAsyncioTestCase):
             await bot.lookup_command.callback(interaction, "steam", "123")
         handler.assert_awaited_once_with(interaction, "123")
         interaction.response.send_message.assert_not_awaited()
+
+    async def test_lookup_rejects_removed_ps5_query(self):
+        interaction = AsyncMock()
+        await bot.lookup_command.callback(interaction, "ps5", "Final Fantasy XVI")
+        interaction.response.send_message.assert_awaited_once()
+        self.assertIn("不支援的平台", interaction.response.send_message.await_args.args[0])
 
     async def test_nintendo_lookup_routes_to_catalogue_price_handler(self):
         interaction = AsyncMock()
