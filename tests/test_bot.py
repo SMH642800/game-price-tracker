@@ -5,6 +5,23 @@ import bot
 
 
 class WatchlistUpdateTests(unittest.TestCase):
+    @patch.object(bot.requests, "get")
+    def test_current_price_parses_steam_price(self, get):
+        response = get.return_value
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"123": {"success": True, "data": {
+            "name": "Example Game",
+            "price_overview": {
+                "currency": "TWD", "final": 9900, "initial": 19900,
+                "discount_percent": 50,
+            },
+        }}}
+        result = bot.get_steam_current_price("123")
+        self.assertEqual(result["name"], "Example Game")
+        self.assertEqual(result["final_price"], 99.0)
+        self.assertEqual(result["discount"], 50)
+        get.assert_called_once()
+
     @patch.object(bot, "github_headers", return_value={"Accept": "application/vnd.github+json"})
     @patch.object(bot.requests, "put")
     @patch.object(bot, "fetch_github_watchlist_with_sha")
