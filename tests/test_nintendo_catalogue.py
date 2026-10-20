@@ -16,19 +16,18 @@ class NintendoCatalogueSearchTests(unittest.TestCase):
         result = catalogue.search_nintendo_games(" 時之笛 ", "ns", rows=rows)
         self.assertEqual([item["product_id"] for item in result], ["70010000000001", "70010000000002"])
 
-    def test_switch_and_switch_2_are_not_mixed(self):
+    def test_switch_and_switch_2_are_included_in_all_nintendo_search_modes(self):
         rows = [
-            {"title": "Example", "nsuid": "70010000000001", "platform": "Nintendo Switch"},
-            {"title": "Example", "nsuid": "70010000000002", "platform": "Nintendo Switch 2"},
+            {"title": "Example Original", "nsuid": "70010000000001", "platform": "Nintendo Switch"},
+            {"title": "Example Nintendo Switch 2 Edition", "nsuid": "70010000000002", "platform": "Nintendo Switch 2"},
         ]
-        self.assertEqual(
-            [item["product_id"] for item in catalogue.search_nintendo_games("Example", "ns", rows=rows)],
-            ["70010000000001"],
-        )
-        self.assertEqual(
-            [item["product_id"] for item in catalogue.search_nintendo_games("Example", "ns2", rows=rows)],
-            ["70010000000002"],
-        )
+        expected = ["70010000000001", "70010000000002"]
+        for platform in ("nintendo", "ns", "ns2"):
+            with self.subTest(platform=platform):
+                self.assertEqual(
+                    [item["product_id"] for item in catalogue.search_nintendo_games("Example", platform, rows=rows)],
+                    expected,
+                )
 
     def test_missing_platform_metadata_is_returned_but_marked_unverified(self):
         rows = [
@@ -70,7 +69,7 @@ class NintendoCatalogueSearchTests(unittest.TestCase):
         self.assertEqual([item["product_id"] for item in result], [
             "70010000000001", "70010000000002", "70010000000003",
         ])
-        self.assertEqual([item["platform"] for item in result], ["ns", "ns2", "nintendo"])
+        self.assertEqual([item["platform"] for item in result], ["nintendo", "nintendo", "nintendo"])
         self.assertFalse(result[2]["platform_verified"])
 
     def test_curated_fallback_finds_missing_trails_in_the_sky_ordinary_switch_edition(self):
@@ -80,7 +79,7 @@ class NintendoCatalogueSearchTests(unittest.TestCase):
             [{
                 "product_id": "70010000128495",
                 "name": "空之軌跡 the 2nd",
-                "platform": "ns",
+                "platform": "nintendo",
                 "platform_verified": True,
             }],
         )
@@ -97,8 +96,8 @@ class NintendoCatalogueSearchTests(unittest.TestCase):
         entry = catalogue.get_nintendo_game_by_id("70010000128495", "ns", rows=[])
         self.assertIsNotNone(entry)
         self.assertEqual(entry["name"], "空之軌跡 the 2nd")
-        self.assertEqual(entry["platform"], "ns")
-        self.assertIsNone(catalogue.get_nintendo_game_by_id("70010000128495", "ns2", rows=[]))
+        self.assertEqual(entry["platform"], "nintendo")
+        self.assertEqual(catalogue.get_nintendo_game_by_id("70010000128495", "ns2", rows=[])["product_id"], "70010000128495")
 
     def test_curated_entry_deduplicates_if_bulk_catalogue_later_adds_same_id(self):
         rows = [{
@@ -114,15 +113,16 @@ class NintendoCatalogueSearchTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             catalogue.search_nintendo_games("Example", "ps5", rows=[])
 
-    def test_lookup_by_id_requires_exact_platform_and_numeric_id(self):
+    def test_lookup_by_id_accepts_any_nintendo_selector_but_requires_numeric_id(self):
         rows = [
             {"title": "Switch 2 edition", "nsuid": "70010000000002", "platform": "Nintendo Switch 2"},
         ]
-        self.assertIsNone(catalogue.get_nintendo_game_by_id("70010000000002", "ns", rows=rows))
-        self.assertEqual(
-            catalogue.get_nintendo_game_by_id("70010000000002", "ns2", rows=rows)["name"],
-            "Switch 2 edition",
-        )
+        for platform in ("nintendo", "ns", "ns2"):
+            with self.subTest(platform=platform):
+                self.assertEqual(
+                    catalogue.get_nintendo_game_by_id("70010000000002", platform, rows=rows)["name"],
+                    "Switch 2 edition",
+                )
         self.assertIsNone(catalogue.get_nintendo_game_by_id("title", "ns2", rows=rows))
 
     def test_expired_cache_fails_closed(self):
