@@ -35,7 +35,10 @@ class NintendoSourceProbeTests(unittest.TestCase):
             session.get.side_effect = [
                 self.make_response({
                     "total": 25,
-                    "items": [{"title": "Game A", "nsuid": "70010000000001"}],
+                    "items": [
+                        {"title": "Game A", "nsuid": "70010000000001"},
+                        *[{"title": f"Filler {index}", "nsuid": str(70010000001000 + index)} for index in range(23)],
+                    ],
                 }),
                 self.make_response({
                     "items": [
@@ -48,9 +51,9 @@ class NintendoSourceProbeTests(unittest.TestCase):
             with patch.object(probe.time, "sleep"):
                 rows, summary = probe.load_catalogue(session, cache_path=cache_path)
 
-            self.assertEqual(len(rows), 3)
+            self.assertEqual(len(rows), 26)
             self.assertEqual(summary["pages_requested"], 2)
-            self.assertEqual(summary["unique_nsuid_count"], 2)
+            self.assertEqual(summary["unique_nsuid_count"], 25)
             self.assertEqual(summary["duplicate_nsuid_rows"], 1)
             self.assertFalse(summary["cache_hit"])
             self.assertTrue(cache_path.exists())
@@ -129,15 +132,23 @@ class NintendoSourceProbeTests(unittest.TestCase):
 
     def test_catalogue_above_warning_threshold_warns_but_continues(self):
         session = Mock()
-        session.get.return_value = self.make_response({
-            "total": probe.PAGE_SIZE * (probe.WARNING_PAGES + 1),
-            "items": [],
-        })
+        total = probe.PAGE_SIZE * (probe.WARNING_PAGES + 1)
+        def response_for_page(*args, **kwargs):
+            page = kwargs["params"]["spage"]
+            start = (page - 1) * probe.PAGE_SIZE
+            return self.make_response({
+                "total": total,
+                "items": [
+                    {"title": f"Game {index}", "nsuid": str(70010000000000 + index)}
+                    for index in range(start, min(start + probe.PAGE_SIZE, total))
+                ],
+            })
+        session.get.side_effect = response_for_page
         with patch.object(probe.time, "sleep"):
             with self.assertWarnsRegex(RuntimeWarning, "warning threshold of 800"):
                 rows, summary = probe.load_catalogue(session, cache_path=None)
         self.assertEqual(summary["pages_requested"], probe.WARNING_PAGES + 1)
-        self.assertEqual(rows, [])
+        self.assertEqual(len(rows), total)
         self.assertEqual(session.get.call_count, probe.WARNING_PAGES + 1)
 
     def test_malformed_page_schema_fails_closed(self):
