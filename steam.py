@@ -75,6 +75,7 @@ def get_price(
     )
     if data is None:
         return None
+    retrieved_at = datetime.now(timezone.utc).isoformat()
 
     url = f"https://store.steampowered.com/app/{product_id}/"
     name = data.get("name", f"Steam App {product_id}")
@@ -115,6 +116,7 @@ def get_price(
         "initial_price": initial_minor / 100,
         "discount": discount,
         "discount_expiration": expiration,
+        "retrieved_at": retrieved_at,
         "url": url,
     }
 
