@@ -5,8 +5,8 @@ A Discord-managed game price tracker. The scheduled GitHub Actions workflow curr
 ## Current capabilities
 
 - Discord slash commands: `/add`, `/remove`, `/list`, `/price`, `/history`, `/help`, `/ping`, and `/admincheck`.
-- `/add` and `/remove` ask for a platform first. Steam has live search and price checking.
-- PS5 and Nintendo Switch 2 platform identifiers are reserved in the data model and command menus, but their live store search and price providers are not enabled until a reliable Taiwan-region source is verified.
+- `/add` and `/remove` ask for a platform first. Steam has live search and price checking; PS5 and Nintendo Switch 2 use title-based lookup and watchlist tracking.
+- `/lookup platform game` returns live Steam prices for Steam, and store plus web price-search links for PS5/NS2. Console links are references, not verified numeric prices.
 - Notification state is stored in `notification_state.json`; corrupted JSON stops the run rather than silently resetting history.
 - `price_history.json` stores up to 365 daily Taiwan-store price observations per product; same-day checks replace that day's sample.
 - `/price` fetches the current Taiwan Steam price. `/history` displays recorded observations and the lowest price observed since tracking began, and links to the matching SteamDB app page for broader historical context.
@@ -30,7 +30,7 @@ Each entry identifies a platform-specific product:
 Historical-price policy: this project separates prices observed directly by the Bot from historical information published by external price-tracking websites. The Bot must not label third-party estimates as its own observations, silently combine the two datasets, or invent missing historical values.
 
 - **Steam:** Steam App Details provides current price, not a complete historical price series. This project records prices from the first successful scheduled check onward. `/history` links to the matching [SteamDB app page](https://steamdb.info/) for broader historical context.
-- **PS5 and Nintendo Switch 2:** if platform support is added, historical-price context will come from suitable external reference websites rather than an assumed complete local history. A source must be checked for the correct game/version and region before its link or data is presented. These platforms remain disabled for automated store search and price checking until a reliable Taiwan-region current-price source is verified.
+- **PS5 and Nintendo Switch 2:** v1 supports title-based tracking plus store and web price-search links, without inventing product IDs or numeric prices. PS5 links use the Taiwan PlayStation Store search; Nintendo Switch 2 links to Nintendo Taiwan's official store landing page plus a web price search. These links are not a price feed, and results must be checked for the correct edition/version and Taiwan region. Automated numeric pricing and historical-price data remain disabled until reliable sources are verified.
 
 SteamDB research note: its [FAQ](https://steamdb.info/faq/) does not offer a generally available public API for this use and disallows unapproved automated scraping. Therefore this project links to SteamDB instead of scraping or importing its data. Direct historical-data import should only be considered if SteamDB provides explicit permission or a supported access method. Do not present SteamDB values as locally verified samples or silently mix them with this Bot's observations.
 
