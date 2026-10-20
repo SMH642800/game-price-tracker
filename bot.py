@@ -254,7 +254,6 @@ ADD_LOOKUP_PLATFORM_CHOICES = [
 
 REMOVE_PLATFORM_CHOICES = [
     app_commands.Choice(name="Steam", value="steam"),
-    app_commands.Choice(name="PlayStation 5（手動追蹤項目）", value="ps5"),
     app_commands.Choice(name="Nintendo Switch／Switch 2（合併）", value="nintendo"),
 ]
 
