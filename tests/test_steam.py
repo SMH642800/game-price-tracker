@@ -26,6 +26,7 @@ class SteamProviderTests(unittest.TestCase):
         self.assertEqual(result["final_price"], 99.0)
         self.assertEqual(result["currency"], "TWD")
         self.assertEqual(result["discount"], 50)
+        self.assertTrue(result["retrieved_at"].endswith("+00:00"))
         self.assertEqual(
             session.get.call_args.kwargs["params"],
             {"appids": "123", "cc": "tw", "l": "tchinese"},
