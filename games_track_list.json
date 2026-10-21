@@ -62,5 +62,12 @@
     "edition": "digital",
     "price_mode": "digital",
     "catalogue_platform_verified": false
+  },
+  {
+    "platform": "steam",
+    "store": "steam",
+    "product_id": "3483510",
+    "region": "TW",
+    "name": "冒險家艾略特的千年奇譚"
   }
 ]
