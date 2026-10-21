@@ -323,11 +323,20 @@ async function postFollowup(i, env, content) {
     method: "POST", headers: { "content-type":"application/json" },
     body: JSON.stringify({ content: String(content).slice(0,2000), flags: EPHEMERAL }),
   });
-  if (!r.ok) console.error("Discord follow-up failed", r.status);
+  if (!r.ok) {
+    const detail = await r.text();
+    console.error("Discord follow-up failed", { status: r.status, detail: detail.slice(0, 500) });
+  }
 }
 async function runDeferred(i, env) {
   try { await postFollowup(i, env, await processCommand(i, env)); }
-  catch (e) { console.error("command failed", i.data?.name, e?.name || "Error"); await postFollowup(i, env, "❌ 指令處理失敗，請稍後再試；若持續發生，請檢查 Worker Logs。").catch(()=>{}); }
+  catch (e) {
+    console.error("command failed", i.data?.name, {
+      name: e?.name || "Error",
+      message: String(e?.message || e).slice(0, 500)
+    });
+    await postFollowup(i, env, "❌ 指令處理失敗，請稍後再試；若持續發生，請檢查 Worker Logs。").catch(()=>{});
+  }
 }
 export default {
   async fetch(request, env, ctx) {
