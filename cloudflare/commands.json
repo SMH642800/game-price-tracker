@@ -1,0 +1,112 @@
+[
+  {
+    "name": "ping",
+    "description": "測試 Game Price Tracker Bot 是否正常運作",
+    "type": 1
+  },
+  {
+    "name": "admincheck",
+    "description": "檢查自己是否具有 Bot 管理員權限",
+    "type": 1
+  },
+  {
+    "name": "help",
+    "description": "查看 Game Price Tracker 的使用說明",
+    "type": 1
+  },
+  {
+    "name": "list",
+    "description": "查看目前追蹤的遊戲",
+    "type": 1
+  },
+  {
+    "name": "add",
+    "description": "選擇平台並搜尋要追蹤的遊戲（管理員限定）",
+    "type": 1,
+    "options": [
+      {
+        "name": "platform",
+        "description": "先選擇遊戲平台",
+        "type": 3,
+        "required": true,
+        "choices": [
+          {
+            "name": "Steam",
+            "value": "steam"
+          },
+          {
+            "name": "Nintendo Switch／Switch 2（合併搜尋）",
+            "value": "nintendo"
+          }
+        ]
+      },
+      {
+        "name": "game",
+        "description": "輸入遊戲名稱，並從搜尋結果中選擇",
+        "type": 3,
+        "required": true,
+        "autocomplete": true
+      }
+    ]
+  },
+  {
+    "name": "remove",
+    "description": "依平台移除追蹤遊戲（管理員限定）",
+    "type": 1,
+    "options": [
+      {
+        "name": "platform",
+        "description": "選擇遊戲平台",
+        "type": 3,
+        "required": true,
+        "choices": [
+          {
+            "name": "Steam",
+            "value": "steam"
+          },
+          {
+            "name": "Nintendo Switch／Switch 2（合併）",
+            "value": "nintendo"
+          }
+        ]
+      },
+      {
+        "name": "game",
+        "description": "選擇該平台已追蹤的遊戲",
+        "type": 3,
+        "required": true,
+        "autocomplete": true
+      }
+    ]
+  },
+  {
+    "name": "lookup",
+    "description": "查詢遊戲目前價格或平台商店連結",
+    "type": 1,
+    "options": [
+      {
+        "name": "platform",
+        "description": "選擇遊戲平台",
+        "type": 3,
+        "required": true,
+        "choices": [
+          {
+            "name": "Steam",
+            "value": "steam"
+          },
+          {
+            "name": "Nintendo Switch／Switch 2（合併搜尋）",
+            "value": "nintendo"
+          }
+        ]
+      },
+      {
+        "name": "game",
+        "description": "輸入遊戲名稱並從目錄／搜尋結果中選擇",
+        "type": 3,
+        "required": true,
+        "autocomplete": true
+      }
+    ]
+  }
+]
