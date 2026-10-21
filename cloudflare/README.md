@@ -14,10 +14,10 @@ This is an isolated migration path. It does not replace `bot.py`, change `main`,
 
 This is an initial port and **has not yet been runtime-tested or approved for production**.
 
-- `/remove` currently does not clean stale entries from `notification_state.json`; do not treat it as full parity yet.
-- The Worker reads the public weekly Nintendo catalogue cache from `main`; the current cache must be fresh. The existing Python implementation also supports a curated fallback and optional HK cache, which this initial Worker port does not fully reproduce.
+- `/remove` now attempts to clean matching entries from `notification_state.json` after removing watchlist rows. If cleanup fails, the watchlist removal remains committed and the command reports a warning; inspect Worker Logs before retrying.
+- The Worker reads the public weekly Nintendo catalogue cache from `main`; the cache must be valid and fresh. The cache was found empty during the 2026-10-21 review, so Nintendo autocomplete and lookup will fail until the weekly catalogue refresh succeeds. The existing Python implementation also supports a curated fallback and optional HK cache, which this Worker port does not fully reproduce.
 - The existing Python provider adapters contain stricter validation and error handling than the first Worker port. Price results must be tested against real API responses before relying on them.
-- GitHub SHA conflicts are retried, but concurrency behaviour needs testing. The GitHub token must have repository Contents read/write access.
+- GitHub SHA conflicts are retried for watchlist and notification-state writes, but concurrency behaviour still needs testing. The GitHub token must have repository Contents read/write access. Writes are hard-blocked unless the effective target branch is exactly `feature/cloudflare-interactions`.
 - Discord interaction tokens expire; verify follow-up handling under slow provider/API responses.
 - Do not expose the Worker to production commands until the full test checklist passes.
 
