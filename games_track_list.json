@@ -52,5 +52,15 @@
     "edition": "digital",
     "price_mode": "digital",
     "catalogue_platform_verified": false
+  },
+  {
+    "platform": "nintendo",
+    "store": "nintendo_eshop",
+    "product_id": "70010000130795",
+    "region": "TW",
+    "name": "薩爾達傳說 時之笛",
+    "edition": "digital",
+    "price_mode": "digital",
+    "catalogue_platform_verified": false
   }
 ]
