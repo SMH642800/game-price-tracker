@@ -14,6 +14,7 @@ const GH_HEADERS = (env) => ({
   Accept: "application/vnd.github+json",
   "X-GitHub-Api-Version": "2022-11-28",
   "Content-Type": "application/json",
+  "User-Agent": "Game-Price-Tracker-Cloudflare-Worker",
 });
 
 function json(data, status = 200) {
@@ -50,21 +51,43 @@ async function githubGet(env, path) {
   if (!env.GITHUB_TOKEN) throw new Error("GITHUB_TOKEN is not configured");
   const response = await fetch(`${GH_API}/${path}?ref=${encodeURIComponent(env.GITHUB_BRANCH || BRANCH)}`, { headers: GH_HEADERS(env) });
   if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`GitHub read failed: HTTP ${response.status}`);
+  if (!response.ok) {
+    const detail = await response.text();
+    console.error("GitHub API diagnostic:", {
+      status: response.status,
+      detail: detail.slice(0, 1000),
+      rateLimitRemaining: response.headers.get("x-ratelimit-remaining"),
+      rateLimitReset: response.headers.get("x-ratelimit-reset")
+    });
+    throw new Error(`GitHub read failed: HTTP ${response.status}`);
+  }
   const payload = await response.json();
   const decoded = atob(payload.content.replace(/\s/g, ""));
   const bytes = Uint8Array.from(decoded, c => c.charCodeAt(0));
   return { data: JSON.parse(new TextDecoder().decode(bytes)), sha: payload.sha };
 }
 async function githubPut(env, path, data, sha, message) {
+  const targetBranch = env.GITHUB_BRANCH || BRANCH;
+  if (targetBranch !== "feature/cloudflare-interactions") {
+    throw new Error("Blocked: refusing to write outside the test branch");
+  }
   const bytes = new TextEncoder().encode(JSON.stringify(data, null, 2) + "\n");
   let binary = "";
   for (const b of bytes) binary += String.fromCharCode(b);
   const response = await fetch(`${GH_API}/${path}`, {
     method: "PUT", headers: GH_HEADERS(env),
-    body: JSON.stringify({ message, content: btoa(binary), sha, branch: env.GITHUB_BRANCH || BRANCH }),
+    body: JSON.stringify({ message, content: btoa(binary), sha, branch: targetBranch }),
   });
-  if (!response.ok) throw new Error(`GitHub write failed: HTTP ${response.status}`);
+  if (!response.ok) {
+    const detail = await response.text();
+    console.error("GitHub write diagnostic:", {
+      status: response.status,
+      detail: detail.slice(0, 1000),
+      rateLimitRemaining: response.headers.get("x-ratelimit-remaining"),
+      rateLimitReset: response.headers.get("x-ratelimit-reset")
+    });
+    throw new Error(`GitHub write failed: HTTP ${response.status}`);
+  }
   return response.json();
 }
 async function getWatchlist(env) {
@@ -257,6 +280,20 @@ async function runDeferred(i, env) {
 }
 export default {
   async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    if (request.method === "GET" && url.pathname === "/ping") {
+      return json({ ok: true, service: "game-price-tracker-interactions-test" });
+    }
+    if (request.method === "GET" && url.pathname === "/github-check") {
+      try {
+        const { data } = await getWatchlist(env);
+        return json({ ok: true, games_count: data.length });
+      } catch (e) {
+        const message = String(e?.message || "Unknown error");
+        console.error("GitHub read check failed:", message);
+        return json({ ok: false, error: message }, 502);
+      }
+    }
     if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
     const body = await request.text();
     if (!await verifyDiscordRequest(request, body, env.DISCORD_PUBLIC_KEY)) return new Response("Invalid request signature", { status: 401 });
