@@ -34,11 +34,11 @@ CACHE_TTL_SECONDS = 8 * 24 * 60 * 60
 CACHE_SCHEMA_VERSION = 1
 DEFAULT_CACHE_PATH = Path(__file__).resolve().parents[1] / ".cache" / "nintendo_tw_catalogue.json"
 TEST_QUERIES = (
-    "時之笛",
-    "亰都幻都",
-    "京都幻都",
-    "Kyoto Xanadu",
-    "空之軌跡",
+    # "時之笛",
+    # "亰都幻都",
+    # "京都幻都",
+    # "Kyoto Xanadu",
+    # "空之軌跡",
 )
 
 
