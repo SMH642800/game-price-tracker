@@ -32,5 +32,15 @@
     "edition": "digital",
     "price_mode": "digital",
     "catalogue_platform_verified": false
+  },
+  {
+    "platform": "nintendo",
+    "store": "nintendo_eshop",
+    "product_id": "70010000133064",
+    "region": "TW",
+    "name": "空之軌跡 the 2nd Nintendo Switch 2 Edition",
+    "edition": "digital",
+    "price_mode": "digital",
+    "catalogue_platform_verified": false
   }
 ]
