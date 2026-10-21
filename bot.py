@@ -16,12 +16,19 @@ from nintendo_catalogue import NintendoCatalogueError, get_nintendo_game_by_id, 
 
 load_dotenv()
 
-TOKEN = os.getenv("DISCORD_BOT_TOKEN")
-ADMIN_ID = os.getenv("DISCORD_ADMIN_ID")
-GUILD_ID = os.getenv("DISCORD_GUILD_ID")
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+# TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+# ADMIN_ID = os.getenv("DISCORD_ADMIN_ID")
+# GUILD_ID = os.getenv("DISCORD_GUILD_ID")
+# GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+# GITHUB_BRANCH = os.getenv("GITHUB_BRANCH", "main")
+
+TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
+ADMIN_ID = os.environ.get("DISCORD_ADMIN_ID")
+GUILD_ID = os.environ.get("DISCORD_GUILD_ID")
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+GITHUB_BRANCH = os.environ.get("GITHUB_BRANCH", "main")
+
 GITHUB_REPO = "SMH642800/game-price-tracker"
-GITHUB_BRANCH = os.getenv("GITHUB_BRANCH", "main")
 GITHUB_FILE_PATH = "games_track_list.json"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
 GITHUB_CONTENTS_URL = f"https://api.github.com/repos/{GITHUB_REPO}/contents"
