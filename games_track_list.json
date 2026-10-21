@@ -42,5 +42,15 @@
     "edition": "digital",
     "price_mode": "digital",
     "catalogue_platform_verified": false
+  },
+  {
+    "platform": "nintendo",
+    "store": "nintendo_eshop",
+    "product_id": "70010000104543",
+    "region": "TW",
+    "name": "STEINS;GATE RE:BOOT",
+    "edition": "digital",
+    "price_mode": "digital",
+    "catalogue_platform_verified": false
   }
 ]
