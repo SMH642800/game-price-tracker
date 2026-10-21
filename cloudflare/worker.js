@@ -109,6 +109,46 @@ async function mutateWatchlist(env, mutator, message) {
   }
   throw new Error("Could not update watchlist");
 }
+
+async function removeNotificationStateEntries(env, removedGames) {
+  if (!Array.isArray(removedGames) || removedGames.length === 0) return 0;
+  const removedIdsByPlatform = {};
+  for (const game of removedGames) {
+    const platform = platformOf(game);
+    const id = productIdOf(game);
+    if (!id) continue;
+    const platforms = ["ns", "ns2", "nintendo"].includes(platform)
+      ? ["ns", "ns2", "nintendo"]
+      : [platform];
+    for (const p of platforms) {
+      if (!removedIdsByPlatform[p]) removedIdsByPlatform[p] = new Set();
+      removedIdsByPlatform[p].add(id);
+    }
+  }
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const current = await githubGet(env, "notification_state.json");
+    if (!current) return 0;
+    if (!current.data || typeof current.data !== "object" || Array.isArray(current.data)) {
+      throw new Error("notification_state.json is malformed");
+    }
+    const state = current.data;
+    const staleKeys = Object.keys(state).filter(key => {
+      const parts = key.split(":");
+      if (parts.length === 4) return Boolean(removedIdsByPlatform[parts[0]]?.has(parts[3]));
+      return /^\d+$/.test(key) && Boolean(removedIdsByPlatform.steam?.has(key));
+    });
+    if (!staleKeys.length) return 0;
+    for (const key of staleKeys) delete state[key];
+    try {
+      await githubPut(env, "notification_state.json", state, current.sha, "Remove notification state for untracked games");
+      return staleKeys.length;
+    } catch (e) {
+      if (attempt === 4 || !String(e.message).includes("HTTP 409")) throw e;
+      await new Promise(resolve => setTimeout(resolve, 200 * (attempt + 1)));
+    }
+  }
+  throw new Error("Could not clean notification state after concurrent changes");
+}
 async function steamSearch(query) {
   const u = new URL("https://store.steampowered.com/api/storesearch/");
   u.search = new URLSearchParams({ term: query, l: "tchinese", cc: "tw" });
@@ -128,10 +168,13 @@ async function steamDetails(id) {
 }
 async function nintendoRows() {
   const url = "https://raw.githubusercontent.com/SMH642800/game-price-tracker/main/.cache/nintendo_tw_catalogue.json";
-  const r = await fetch(url);
-  if (!r.ok) throw new Error("Nintendo catalogue cache unavailable");
-  const d = await r.json();
-  if (d.schema_version !== 1 || !Array.isArray(d.rows) || typeof d.fetched_at !== "number" || Date.now()/1000 - d.fetched_at > 8*24*60*60) throw new Error("Nintendo catalogue cache is stale or invalid");
+  const r = await fetch(url, { headers: { "Accept": "application/json", "User-Agent": "Game-Price-Tracker-Cloudflare-Worker" } });
+  if (!r.ok) throw new Error(`Nintendo catalogue cache unavailable (HTTP ${r.status})`);
+  let d;
+  try { d = await r.json(); } catch { throw new Error("Nintendo catalogue cache is empty or invalid JSON; check the weekly catalogue refresh workflow"); }
+  if (!d || d.schema_version !== 1 || !Array.isArray(d.rows) || typeof d.fetched_at !== "number" || Date.now()/1000 - d.fetched_at < 0 || Date.now()/1000 - d.fetched_at > 8*24*60*60) {
+    throw new Error("Nintendo catalogue cache is stale or invalid; check the weekly catalogue refresh workflow");
+  }
   return d.rows;
 }
 const norm = s => String(s).normalize("NFKC").toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
@@ -229,7 +272,15 @@ async function processCommand(i, env) {
       return { games: games.filter(g => !(valid.includes(platformOf(g)) && productIdOf(g)===id)), value: gone };
     }, "Remove tracked game via Cloudflare Discord Worker");
     if (!removed.length) return "⚠️ 找不到該平台的追蹤遊戲，清單未變更。";
-    return `✅ 已從 ${SUPPORTED[platform] || platform} 移除：${removed.map(g=>g.name || "未知遊戲").join("、")}。注意：此測試版尚未清理 notification_state.json 中的舊通知狀態。`;
+    let stateNote = "";
+    try {
+      const cleaned = await removeNotificationStateEntries(env, removed);
+      stateNote = cleaned ? ` 已清理 ${cleaned} 筆舊通知狀態。` : " 沒有需要清理的舊通知狀態。";
+    } catch (e) {
+      console.error("notification state cleanup failed", e?.name || "Error");
+      stateNote = " ⚠️ 追蹤清單已更新，但舊通知狀態清理失敗，請檢查 Worker Logs。";
+    }
+    return `✅ 已從 ${SUPPORTED[platform] || platform} 移除：${removed.map(g=>g.name || "未知遊戲").join("、")}。${stateNote}`;
   }
   if (command === "lookup") {
     const platform = String(opt(i,"platform") || "").toLowerCase(), id = String(opt(i,"game") || "").trim();
