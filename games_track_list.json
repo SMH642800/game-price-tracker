@@ -69,5 +69,15 @@
     "product_id": "3483510",
     "region": "TW",
     "name": "冒險家艾略特的千年奇譚"
+  },
+  {
+    "platform": "nintendo",
+    "store": "nintendo_eshop",
+    "product_id": "70010000096832",
+    "region": "TW",
+    "name": "星之卡比 探索發現 Nintendo Switch 2 Edition + 星耀世界",
+    "edition": "digital",
+    "price_mode": "digital",
+    "catalogue_platform_verified": false
   }
 ]
