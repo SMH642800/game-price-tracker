@@ -281,7 +281,12 @@ async def admincheck(interaction: discord.Interaction):
 
 @tree.command(name="list", description="查看目前追蹤的遊戲")
 async def list_games(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True, thinking=True)
+    try:
+        await interaction.response.defer(ephemeral=True, thinking=True)
+    except discord.HTTPException as e:
+        if e.code != 40060:
+            raise
+        print("⚠️ /list：Interaction 已被確認，改用 followup 繼續回覆。")
     try:
         games = await asyncio.to_thread(load_github_watchlist)
         lines = [f"🎮 **遊戲追蹤清單**（共 {len(games)} 款）"]
