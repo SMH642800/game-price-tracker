@@ -2,5 +2,9 @@
   "nintendo:nintendo_eshop:TW:70010000106471": {
     "discount": 49,
     "final_price": 971.0
+  },
+  "steam:steam:TW:3483510": {
+    "discount": 30,
+    "final_price": 1113.0
   }
 }
