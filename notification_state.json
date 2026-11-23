@@ -6,5 +6,9 @@
   "steam:steam:TW:3483510": {
     "discount": 30,
     "final_price": 1113.0
+  },
+  "steam:steam:TW:2483190": {
+    "discount": 25,
+    "final_price": 1492.0
   }
 }
