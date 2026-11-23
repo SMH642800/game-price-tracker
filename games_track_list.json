@@ -79,5 +79,12 @@
     "edition": "digital",
     "price_mode": "digital",
     "catalogue_platform_verified": false
+  },
+  {
+    "platform": "steam",
+    "store": "steam",
+    "product_id": "2483190",
+    "region": "TW",
+    "name": "Forza Horizon 6"
   }
 ]
